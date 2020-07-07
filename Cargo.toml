@@ -1,0 +1,2 @@
+[workspace]
+members = ["act-zero", "act-zero-macro"]
