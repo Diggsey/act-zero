@@ -1,21 +1,21 @@
+#![feature(fundamental)]
+
 use std::sync::Arc;
 
 pub use act_zero_macro::act_zero;
-pub use futures::channel::oneshot::{channel, Receiver, Sender};
 use futures::task::{Spawn, SpawnError};
-
-#[doc(hidden)]
-pub mod hidden;
 
 mod addr;
 pub mod async_fn;
-pub mod channel;
+mod channel;
 pub mod remote;
 pub mod sync;
 
 pub use addr::{Addr, AddrExt, WeakAddr};
 use async_fn::{AsyncFnOnce, AsyncMutFnOnce};
+pub use channel::{channel, Receiver, Sender};
 
+#[fundamental]
 pub struct Local<T: Actor> {
     actor: sync::RwLock<T>,
 }

@@ -29,14 +29,7 @@ impl Drop for MyActor {
     }
 }
 
-// #[act_zero]
-// trait MyActorTrait {
-//     fn do_something(&self, res: Sender<bool>);
-//     fn do_generic_thing<T>(&self, res: Sender<T>) where Self: Sized;
-// }
-
-// =>
-
+#[act_zero]
 trait MyActorTrait {
     fn do_something(&self, res: Sender<bool>);
     fn do_generic_thing<T: Send + 'static>(&self, res: Sender<T>)
@@ -44,32 +37,61 @@ trait MyActorTrait {
         Self: Sized;
 }
 
-enum MyActorTraitMsg {
-    DoSomething(Sender<bool>),
-}
+// =>
 
-impl Handle<MyActorTraitMsg> for dyn MyActorTrait {
-    fn handle(&self, msg: MyActorTraitMsg) {
-        match msg {
-            MyActorTraitMsg::DoSomething(res) => self.do_something(res),
-        }
-    }
-}
+// trait MyActorTrait {
+//     fn do_something(&self, res: Sender<bool>);
+//     fn do_generic_thing<T: Send + 'static>(&self, res: Sender<T>)
+//     where
+//         Self: Sized;
+// }
 
-impl<R> MyActorTrait for remote::Remote<R>
-where
-    R: Handle<MyActorTraitMsg>,
-{
-    fn do_something(&self, res: Sender<bool>) {
-        self.inner().handle(MyActorTraitMsg::DoSomething(res));
-    }
-    fn do_generic_thing<T: Send + 'static>(&self, _res: Sender<T>)
-    where
-        Self: Sized,
-    {
-        panic!("Only object-safe methods can be proxied");
-    }
-}
+// trait __MyActorTraitInternal: Sized + Actor {
+//     fn do_something(this: &Local<Self>, res: Sender<bool>);
+//     fn do_generic_thing<T: Send + 'static>(this: &Local<Self>, res: Sender<T>);
+// }
+
+// enum MyActorTraitMsg {
+//     DoSomething(Sender<bool>),
+// }
+
+// impl Handle<__MyActorTraitMsg> for dyn MyActorTrait {
+//     fn handle(&self, msg: __MyActorTraitMsg) {
+//         match msg {
+//             __MyActorTraitMsg::DoSomething(res) => self.do_something(res),
+//         }
+//     }
+// }
+
+// impl<R> MyActorTrait for remote::Remote<R>
+// where
+//     R: Handle<__MyActorTraitMsg>,
+// {
+//     fn do_something(&self, res: Sender<bool>) {
+//         self.inner().handle(__MyActorTraitMsg::DoSomething(res));
+//     }
+//     fn do_generic_thing<T: Send + 'static>(&self, _res: Sender<T>)
+//     where
+//         Self: Sized,
+//     {
+//         panic!("Only object-safe methods can be proxied");
+//     }
+// }
+
+// impl<A> MyActorTrait for Local<A>
+// where
+//     A: __MyActorTraitInternal,
+// {
+//     fn do_something(&self, res: Sender<bool>) {
+//         A::do_something(self, res)
+//     }
+//     fn do_generic_thing<T: Send + 'static>(&self, res: Sender<T>)
+//     where
+//         Self: Sized,
+//     {
+//         A::do_generic_thing(self, res)
+//     }
+// }
 
 trait MyActorTraitExt: AddrExt
 where
@@ -125,27 +147,24 @@ impl MyActor {
     }
 }
 
-impl MyActorTrait for Local<MyActor> {
-    fn do_something(&self, res: Sender<bool>) {
+impl __MyActorTraitInternal for MyActor {
+    fn do_something(this: &Local<MyActor>, res: Sender<bool>) {
         async fn inner(
             actor: &mut MyActor,
             (res,): (Sender<bool>,),
         ) -> Result<(), Box<dyn Error + Send>> {
             actor.do_something(res).await
         }
-        self.send_mut(Closure::new(inner, (res,)));
+        this.send_mut(Closure::new(inner, (res,)));
     }
-    fn do_generic_thing<T: Send + 'static>(&self, res: Sender<T>)
-    where
-        Self: Sized,
-    {
+    fn do_generic_thing<T: Send + 'static>(this: &Local<MyActor>, res: Sender<T>) {
         async fn inner<T>(
             actor: &mut MyActor,
             (res,): (Sender<T>,),
         ) -> Result<(), Box<dyn Error + Send>> {
             actor.do_generic_thing(res).await
         }
-        self.send_mut(Closure::new(inner, (res,)));
+        this.send_mut(Closure::new(inner, (res,)));
     }
 }
 
