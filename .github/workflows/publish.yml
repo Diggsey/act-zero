@@ -22,3 +22,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: publish
+          args: --manifest-path act-zero-macro/Cargo.toml
+      - uses: actions-rs/cargo@v1
+        with:
+          command: publish
+          args: --manifest-path act-zero/Cargo.toml
