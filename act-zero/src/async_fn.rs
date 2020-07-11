@@ -7,8 +7,8 @@ use futures::FutureExt;
 
 pub trait AsyncFnOnce<T> {
     type Output: Send + 'static;
-    fn call<'a>(self, arg: &'a T) -> BoxFuture<'a, Self::Output>;
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a T) -> BoxFuture<'a, Self::Output>;
+    fn call(self, arg: &T) -> BoxFuture<Self::Output>;
+    fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output>;
     fn map<G, R>(self, g: G) -> AsyncMap<Self, G>
     where
         G: FnOnce(Self::Output, &T) -> R,
@@ -26,8 +26,8 @@ pub trait AsyncFnOnce<T> {
 
 pub trait AsyncMutFnOnce<T> {
     type Output: Send + 'static;
-    fn call<'a>(self, arg: &'a mut T) -> BoxFuture<'a, Self::Output>;
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a mut T) -> BoxFuture<'a, Self::Output>;
+    fn call(self, arg: &mut T) -> BoxFuture<Self::Output>;
+    fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output>;
     fn map<G, R>(self, g: G) -> AsyncMap<Self, G>
     where
         G: FnOnce(Self::Output, &mut T) -> R,
@@ -48,10 +48,10 @@ where
     F: AsyncFnOnce<T> + ?Sized,
 {
     type Output = F::Output;
-    fn call<'a>(self, arg: &'a T) -> BoxFuture<'a, Self::Output> {
+    fn call(self, arg: &T) -> BoxFuture<Self::Output> {
         self.call_boxed(arg)
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -61,10 +61,10 @@ where
     F: AsyncMutFnOnce<T>,
 {
     type Output = F::Output;
-    fn call<'a>(self, arg: &'a mut T) -> BoxFuture<'a, Self::Output> {
+    fn call(self, arg: &mut T) -> BoxFuture<Self::Output> {
         self.call_boxed(arg)
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a mut T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -82,7 +82,7 @@ where
     T: Sync,
 {
     type Output = R;
-    fn call<'a>(self, arg: &'a T) -> BoxFuture<'a, R> {
+    fn call(self, arg: &T) -> BoxFuture<R> {
         let AsyncMap { fun, g } = self;
         let fut = fun.call(arg);
         async move {
@@ -91,7 +91,7 @@ where
         }
         .boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -104,7 +104,7 @@ where
     T: Send,
 {
     type Output = R;
-    fn call<'a>(self, arg: &'a mut T) -> BoxFuture<'a, R> {
+    fn call(self, arg: &mut T) -> BoxFuture<R> {
         let AsyncMap { fun, g } = self;
         async move {
             let fut = fun.call(arg);
@@ -113,7 +113,7 @@ where
         }
         .boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a mut T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -129,7 +129,7 @@ where
     R: Send + 'static,
 {
     type Output = ();
-    fn call<'a>(self, arg: &'a T) -> BoxFuture<'a, ()> {
+    fn call(self, arg: &T) -> BoxFuture<()> {
         let BindOutput { fun, tx } = self;
         fun.call(arg)
             .map(move |res| {
@@ -137,7 +137,7 @@ where
             })
             .boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -148,7 +148,7 @@ where
     R: Send + 'static,
 {
     type Output = ();
-    fn call<'a>(self, arg: &'a mut T) -> BoxFuture<'a, ()> {
+    fn call(self, arg: &mut T) -> BoxFuture<()> {
         let BindOutput { fun, tx } = self;
         fun.call(arg)
             .map(move |res| {
@@ -156,7 +156,7 @@ where
             })
             .boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a mut T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -217,11 +217,11 @@ where
     R: Send + 'static,
 {
     type Output = R;
-    fn call<'a>(self, arg: &'a T) -> BoxFuture<'a, R> {
+    fn call(self, arg: &T) -> BoxFuture<R> {
         let Closure { fun, upvar, .. } = self;
         fun.call_closure(arg, upvar).boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }
@@ -232,11 +232,11 @@ where
     R: Send + 'static,
 {
     type Output = R;
-    fn call<'a>(self, arg: &'a mut T) -> BoxFuture<'a, R> {
+    fn call(self, arg: &mut T) -> BoxFuture<R> {
         let Closure { fun, upvar, .. } = self;
         fun.call_closure(arg, upvar).boxed()
     }
-    fn call_boxed<'a>(self: Box<Self>, arg: &'a mut T) -> BoxFuture<'a, Self::Output> {
+    fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output> {
         (*self).call(arg)
     }
 }

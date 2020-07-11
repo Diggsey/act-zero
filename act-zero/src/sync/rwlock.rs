@@ -44,7 +44,7 @@ async fn rwlock_run_shared_tasks<'a, T>(
             None => break None,
         }
     };
-    while let Some(_) = shared.next().await {}
+    while shared.next().await.is_some() {}
     res
 }
 
