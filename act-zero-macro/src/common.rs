@@ -84,9 +84,9 @@ impl SubstitutePath for syn::Path {
 impl SubstitutePath for syn::Generics {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            lt_token: self.lt_token.clone(),
+            lt_token: self.lt_token,
             params: self.params.substitute_path(f),
-            gt_token: self.gt_token.clone(),
+            gt_token: self.gt_token,
             where_clause: self.where_clause.substitute_path(f),
         }
     }
@@ -95,7 +95,7 @@ impl SubstitutePath for syn::Generics {
 impl SubstitutePath for syn::WhereClause {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            where_token: self.where_token.clone(),
+            where_token: self.where_token,
             predicates: self.predicates.substitute_path(f),
         }
     }
@@ -115,7 +115,7 @@ impl SubstitutePath for syn::PredicateEq {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
             lhs_ty: self.lhs_ty.substitute_path(f),
-            eq_token: self.eq_token.clone(),
+            eq_token: self.eq_token,
             rhs_ty: self.rhs_ty.substitute_path(f),
         }
     }
@@ -126,7 +126,7 @@ impl SubstitutePath for syn::PredicateType {
         Self {
             lifetimes: self.lifetimes.clone(),
             bounded_ty: self.bounded_ty.substitute_path(f),
-            colon_token: self.colon_token.clone(),
+            colon_token: self.colon_token,
             bounds: self.bounds.substitute_path(f),
         }
     }
@@ -146,11 +146,11 @@ impl SubstitutePath for syn::ConstParam {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
             attrs: self.attrs.clone(),
-            const_token: self.const_token.clone(),
+            const_token: self.const_token,
             ident: self.ident.clone(),
-            colon_token: self.colon_token.clone(),
+            colon_token: self.colon_token,
             ty: self.ty.substitute_path(f),
-            eq_token: self.eq_token.clone(),
+            eq_token: self.eq_token,
             default: self.default.clone(),
         }
     }
@@ -161,9 +161,9 @@ impl SubstitutePath for syn::TypeParam {
         Self {
             attrs: self.attrs.clone(),
             ident: self.ident.clone(),
-            colon_token: self.colon_token.clone(),
+            colon_token: self.colon_token,
             bounds: self.bounds.substitute_path(f),
-            eq_token: self.eq_token.clone(),
+            eq_token: self.eq_token,
             default: self.default.substitute_path(f),
         }
     }
@@ -191,7 +191,7 @@ impl SubstitutePath for syn::Type {
 impl SubstitutePath for syn::TypeTuple {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            paren_token: self.paren_token.clone(),
+            paren_token: self.paren_token,
             elems: self.elems.substitute_path(f),
         }
     }
@@ -200,7 +200,7 @@ impl SubstitutePath for syn::TypeTuple {
 impl SubstitutePath for syn::TypeTraitObject {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            dyn_token: self.dyn_token.clone(),
+            dyn_token: self.dyn_token,
             bounds: self.bounds.substitute_path(f),
         }
     }
@@ -209,7 +209,7 @@ impl SubstitutePath for syn::TypeTraitObject {
 impl SubstitutePath for syn::TypeSlice {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            bracket_token: self.bracket_token.clone(),
+            bracket_token: self.bracket_token,
             elem: self.elem.substitute_path(f),
         }
     }
@@ -218,9 +218,9 @@ impl SubstitutePath for syn::TypeSlice {
 impl SubstitutePath for syn::TypeReference {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            and_token: self.and_token.clone(),
+            and_token: self.and_token,
             lifetime: self.lifetime.clone(),
-            mutability: self.mutability.clone(),
+            mutability: self.mutability,
             elem: self.elem.substitute_path(f),
         }
     }
@@ -229,9 +229,9 @@ impl SubstitutePath for syn::TypeReference {
 impl SubstitutePath for syn::TypePtr {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            star_token: self.star_token.clone(),
-            const_token: self.const_token.clone(),
-            mutability: self.mutability.clone(),
+            star_token: self.star_token,
+            const_token: self.const_token,
+            mutability: self.mutability,
             elem: self.elem.substitute_path(f),
         }
     }
@@ -249,11 +249,11 @@ impl SubstitutePath for syn::TypePath {
 impl SubstitutePath for syn::QSelf {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            lt_token: self.lt_token.clone(),
+            lt_token: self.lt_token,
             ty: self.ty.substitute_path(f),
-            position: self.position.clone(),
-            as_token: self.as_token.clone(),
-            gt_token: self.gt_token.clone(),
+            position: self.position,
+            as_token: self.as_token,
+            gt_token: self.gt_token,
         }
     }
 }
@@ -261,7 +261,7 @@ impl SubstitutePath for syn::QSelf {
 impl SubstitutePath for syn::TypeParen {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            paren_token: self.paren_token.clone(),
+            paren_token: self.paren_token,
             elem: self.elem.substitute_path(f),
         }
     }
@@ -270,7 +270,7 @@ impl SubstitutePath for syn::TypeParen {
 impl SubstitutePath for syn::TypeImplTrait {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            impl_token: self.impl_token.clone(),
+            impl_token: self.impl_token,
             bounds: self.bounds.substitute_path(f),
         }
     }
@@ -279,7 +279,7 @@ impl SubstitutePath for syn::TypeImplTrait {
 impl SubstitutePath for syn::TypeGroup {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            group_token: self.group_token.clone(),
+            group_token: self.group_token,
             elem: self.elem.substitute_path(f),
         }
     }
@@ -288,9 +288,9 @@ impl SubstitutePath for syn::TypeGroup {
 impl SubstitutePath for syn::TypeArray {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            bracket_token: self.bracket_token.clone(),
+            bracket_token: self.bracket_token,
             elem: self.elem.substitute_path(f),
-            semi_token: self.semi_token.clone(),
+            semi_token: self.semi_token,
             len: self.len.clone(),
         }
     }
@@ -300,10 +300,10 @@ impl SubstitutePath for syn::TypeBareFn {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
             lifetimes: self.lifetimes.clone(),
-            unsafety: self.unsafety.clone(),
+            unsafety: self.unsafety,
             abi: self.abi.clone(),
-            fn_token: self.fn_token.clone(),
-            paren_token: self.paren_token.clone(),
+            fn_token: self.fn_token,
+            paren_token: self.paren_token,
             inputs: self.inputs.substitute_path(f),
             variadic: self.variadic.clone(),
             output: self.output.substitute_path(f),
@@ -325,7 +325,7 @@ impl SubstitutePath for syn::ReturnType {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         match self {
             Self::Default => Self::Default,
-            Self::Type(x, y) => Self::Type(x.clone(), y.substitute_path(f)),
+            Self::Type(x, y) => Self::Type(*x, y.substitute_path(f)),
         }
     }
 }
@@ -342,8 +342,8 @@ impl SubstitutePath for syn::TypeParamBound {
 impl SubstitutePath for syn::TraitBound {
     fn substitute_path(&self, f: &mut dyn FnMut(&syn::Path) -> syn::Path) -> Self {
         Self {
-            paren_token: self.paren_token.clone(),
-            modifier: self.modifier.clone(),
+            paren_token: self.paren_token,
+            modifier: self.modifier,
             lifetimes: self.lifetimes.clone(),
             path: self.path.substitute_path(f),
         }

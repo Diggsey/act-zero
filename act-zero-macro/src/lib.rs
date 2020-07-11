@@ -17,8 +17,8 @@ pub fn act_zero(_attr: TokenStream, item: TokenStream) -> TokenStream {
 fn act_zero_impl(item: TokenStream) -> syn::Result<TokenStream2> {
     let item: syn::Item = syn::parse(item)?;
     Ok(match item {
-        syn::Item::Trait(trait_item) => expand_trait::expand(trait_item)?.into(),
-        syn::Item::Impl(impl_item) => expand_impl::expand(impl_item)?.into(),
+        syn::Item::Trait(trait_item) => expand_trait::expand(trait_item)?,
+        syn::Item::Impl(impl_item) => expand_impl::expand(impl_item)?,
         _ => {
             return Err(syn::Error::new_spanned(
                 item,

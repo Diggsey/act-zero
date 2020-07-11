@@ -144,7 +144,7 @@ impl ActorTrait {
         syn::ItemImpl {
             attrs: Vec::new(),
             defaultness: None,
-            unsafety: self.unsafety.clone(),
+            unsafety: self.unsafety,
             impl_token: Default::default(),
             generics,
             trait_: Some((None, self.trait_path.clone(), Default::default())),
@@ -169,7 +169,7 @@ impl ActorTrait {
         syn::ItemImpl {
             attrs: Vec::new(),
             defaultness: None,
-            unsafety: self.unsafety.clone(),
+            unsafety: self.unsafety,
             impl_token: Default::default(),
             generics,
             trait_: Some((None, self.trait_path.clone(), Default::default())),
@@ -268,7 +268,7 @@ impl ActorTraitItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
@@ -334,7 +334,7 @@ impl ActorTraitItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
@@ -371,7 +371,7 @@ impl ActorTraitItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
@@ -399,7 +399,7 @@ impl ActorTraitItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
@@ -442,7 +442,7 @@ impl ActorTraitItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: call_ident,
@@ -587,7 +587,7 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
                 .unwrap_or_default();
 
             items.push(ActorTraitItem {
-                unsafety: method.sig.unsafety.clone(),
+                unsafety: method.sig.unsafety,
                 ident: method.sig.ident.clone(),
                 generics: method.sig.generics.clone(),
                 inputs,
@@ -612,7 +612,7 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
     let ext_trait_path = parse_quote!(#ext_trait_ident #ty_generics);
 
     Ok(ActorTrait {
-        unsafety: trait_item.unsafety.clone(),
+        unsafety: trait_item.unsafety,
         vis: trait_item.vis.clone(),
         generics: trait_item.generics.clone(),
         items,

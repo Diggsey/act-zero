@@ -20,7 +20,7 @@ impl ActorTraitImpl {
         syn::ItemImpl {
             attrs: Vec::new(),
             defaultness: None,
-            unsafety: self.unsafety.clone(),
+            unsafety: self.unsafety,
             impl_token: Default::default(),
             generics: self.generics.clone(),
             trait_: Some((None, self.internal_trait_path.clone(), Default::default())),
@@ -52,12 +52,12 @@ struct ActorTraitImplItem {
 
 fn combine_generics(a: &syn::Generics, b: &syn::Generics) -> syn::Generics {
     syn::Generics {
-        lt_token: a.lt_token.clone().or(b.lt_token.clone()),
+        lt_token: a.lt_token.or(b.lt_token),
         params: a.params.iter().chain(b.params.iter()).cloned().collect(),
-        gt_token: a.gt_token.clone().or(b.gt_token.clone()),
+        gt_token: a.gt_token.or(b.gt_token),
         where_clause: if let (Some(aw), Some(bw)) = (&a.where_clause, &b.where_clause) {
             Some(syn::WhereClause {
-                where_token: aw.where_token.clone(),
+                where_token: aw.where_token,
                 predicates: aw
                     .predicates
                     .iter()
@@ -66,7 +66,7 @@ fn combine_generics(a: &syn::Generics, b: &syn::Generics) -> syn::Generics {
                     .collect(),
             })
         } else {
-            a.where_clause.clone().or(b.where_clause.clone())
+            a.where_clause.clone().or_else(|| b.where_clause.clone())
         },
     }
 }
@@ -115,7 +115,7 @@ impl ActorTraitImplItem {
             vis: syn::Visibility::Inherited,
             sig: syn::Signature {
                 constness: None,
-                asyncness: self.asyncness.clone(),
+                asyncness: self.asyncness,
                 unsafety: None,
                 abi: None,
                 fn_token: Default::default(),
@@ -136,7 +136,7 @@ impl ActorTraitImplItem {
             sig: syn::Signature {
                 constness: None,
                 asyncness: None,
-                unsafety: self.unsafety.clone(),
+                unsafety: self.unsafety,
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
@@ -243,8 +243,8 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
                 .collect();
 
             items.push(ActorTraitImplItem {
-                unsafety: method.sig.unsafety.clone(),
-                asyncness: method.sig.asyncness.clone(),
+                unsafety: method.sig.unsafety,
+                asyncness: method.sig.asyncness,
                 ident,
                 generics: method.sig.generics.clone(),
                 inputs,
@@ -276,7 +276,7 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
     };
 
     Ok(ActorTraitImpl {
-        unsafety: item_impl.unsafety.clone(),
+        unsafety: item_impl.unsafety,
         generics: item_impl.generics.clone(),
         self_ty: item_impl.self_ty.clone(),
         items,
