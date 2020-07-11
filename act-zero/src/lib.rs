@@ -1,5 +1,3 @@
-#![feature(fundamental)]
-
 use std::sync::Arc;
 
 pub use act_zero_macro::act_zero;
@@ -18,7 +16,6 @@ pub use channel::{channel, Receiver, Sender, SenderExt};
 use async_fn::{AsyncFnOnce, AsyncMutFnOnce};
 use utils::IntoResult;
 
-#[fundamental]
 pub struct Local<T: Actor> {
     actor: sync::RwLock<T>,
 }
