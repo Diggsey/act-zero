@@ -1,6 +1,7 @@
 use std::sync::{Arc, Weak};
 
 use super::Handle;
+use crate::utils::UpcastFrom;
 
 pub trait AddrExt {
     type Inner: ?Sized;
@@ -12,8 +13,11 @@ pub trait AddrExt {
 pub struct WeakAddr<T: ?Sized>(pub(crate) Option<Weak<T>>);
 
 impl<T: ?Sized> WeakAddr<T> {
-    pub fn map<U>(self, f: impl FnOnce(Weak<T>) -> Weak<U>) -> WeakAddr<U> {
+    pub fn map<U: ?Sized>(self, f: impl FnOnce(Weak<T>) -> Weak<U>) -> WeakAddr<U> {
         WeakAddr(self.0.map(f))
+    }
+    pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> WeakAddr<U> {
+        self.map(UpcastFrom::upcast_weak)
     }
 }
 
@@ -48,8 +52,11 @@ impl<M: Send + 'static, T: Handle<M>> Handle<M> for WeakAddr<T> {
 pub struct Addr<T: ?Sized>(pub(crate) Option<Arc<T>>);
 
 impl<T: ?Sized> Addr<T> {
-    pub fn map<U>(self, f: impl FnOnce(Arc<T>) -> Arc<U>) -> Addr<U> {
+    pub fn map<U: ?Sized>(self, f: impl FnOnce(Arc<T>) -> Arc<U>) -> Addr<U> {
         Addr(self.0.map(f))
+    }
+    pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> Addr<U> {
+        self.map(UpcastFrom::upcast)
     }
     pub fn downgrade(&self) -> WeakAddr<T> {
         WeakAddr(self.0.as_ref().map(Arc::downgrade))

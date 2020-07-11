@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream as TokenStream2;
 
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{parse_quote, punctuated::Punctuated, token};
 
 use crate::common::*;
@@ -8,7 +8,6 @@ use crate::common::*;
 struct ActorTrait {
     vis: syn::Visibility,
     unsafety: Option<token::Unsafe>,
-    ident: syn::Ident,
     generics: syn::Generics,
     items: Vec<ActorTraitItem>,
 
@@ -70,7 +69,7 @@ impl ActorTrait {
             .items
             .iter()
             .filter(|item| item.is_object_safe)
-            .map(|item| ActorTraitItem::handle_impl(item, &msg_enum_path))
+            .map(|item| ActorTraitItem::handle_impl(item, &self.msg_enum_ident))
             .collect();
 
         syn::ItemImpl {
@@ -97,6 +96,42 @@ impl ActorTrait {
             .collect(),
         }
     }
+    fn upcast_impl(&self) -> syn::ItemImpl {
+        let t_arg = format_ident!("__T");
+        let trait_path = &self.trait_path;
+
+        let mut generics = self.generics.clone();
+        generics
+            .params
+            .push(parse_quote!(#t_arg: #trait_path + 'static));
+
+        syn::ItemImpl {
+            attrs: Vec::new(),
+            defaultness: None,
+            unsafety: None,
+            impl_token: Default::default(),
+            generics,
+            trait_: Some((
+                None,
+                parse_quote!(::act_zero::utils::UpcastFrom<#t_arg>),
+                Default::default(),
+            )),
+            self_ty: parse_quote!(dyn #trait_path),
+            brace_token: Default::default(),
+            items: vec![
+                parse_quote!(
+                    fn upcast(this: ::std::sync::Arc<#t_arg>) -> ::std::sync::Arc<Self> {
+                        this
+                    }
+                ),
+                parse_quote!(
+                    fn upcast_weak(this: ::std::sync::Weak<#t_arg>) -> ::std::sync::Weak<Self> {
+                        this
+                    }
+                ),
+            ],
+        }
+    }
     fn impl_remote(&self) -> syn::ItemImpl {
         let remote_arg = format_ident!("__R");
         let msg_enum_path = &self.msg_enum_path;
@@ -118,7 +153,7 @@ impl ActorTrait {
             items: self
                 .items
                 .iter()
-                .map(|item| item.impl_remote(&msg_enum_path))
+                .map(|item| item.impl_remote(&self.msg_enum_ident))
                 .collect(),
         }
     }
@@ -166,7 +201,42 @@ impl ActorTrait {
             colon_token: Some(Default::default()),
             supertraits: parse_quote!(::act_zero::AddrExt),
             brace_token: Default::default(),
-            items: self.items.iter().map(ActorTraitItem::ext_trait).collect(),
+            items: self
+                .items
+                .iter()
+                .map(ActorTraitItem::ext_trait)
+                .chain(
+                    self.items
+                        .iter()
+                        .filter(|item| item.is_callable)
+                        .map(ActorTraitItem::ext_trait_call),
+                )
+                .collect(),
+        }
+    }
+    fn impl_ext(&self) -> syn::ItemImpl {
+        let addr_arg = format_ident!("__A");
+        let trait_path = &self.trait_path;
+
+        let mut generics = self.generics.clone();
+        generics
+            .params
+            .push(parse_quote!(#addr_arg: ::act_zero::AddrExt));
+        generics
+            .make_where_clause()
+            .predicates
+            .push(parse_quote!(#addr_arg::Inner: #trait_path));
+
+        syn::ItemImpl {
+            attrs: Vec::new(),
+            defaultness: None,
+            unsafety: None,
+            impl_token: Default::default(),
+            generics,
+            trait_: Some((None, self.ext_trait_path.clone(), Default::default())),
+            self_ty: parse_quote!(#addr_arg),
+            brace_token: Default::default(),
+            items: Vec::new(),
         }
     }
 }
@@ -177,6 +247,8 @@ struct ActorTraitItem {
     generics: syn::Generics,
     inputs: Vec<syn::PatType>,
     is_object_safe: bool,
+    is_callable: bool,
+    default: Option<syn::Block>,
 
     // Derived state
     variant_ident: syn::Ident,
@@ -186,8 +258,9 @@ struct ActorTraitItem {
 
 impl ActorTraitItem {
     fn internal_trait(&self) -> syn::TraitItem {
+        let this = this_ident();
         let mut inputs = Punctuated::new();
-        inputs.push(parse_quote!(this: &::act_zero::Local<Self>));
+        inputs.push(parse_quote!(#this: &::act_zero::Local<Self>));
         inputs.extend(self.inputs.iter().cloned().map(syn::FnArg::Typed));
 
         syn::TraitItem::Method(syn::TraitItemMethod {
@@ -205,7 +278,12 @@ impl ActorTraitItem {
                 variadic: None,
                 output: syn::ReturnType::Default,
             },
-            default: None, // TODO
+            default: self.default.as_ref().map(|block| {
+                let ts = block
+                    .to_token_stream()
+                    .replace_ident(&parse_quote!(self), &this);
+                parse_quote!(#ts)
+            }),
             semi_token: Some(Default::default()),
         })
     }
@@ -232,16 +310,16 @@ impl ActorTraitItem {
         }
     }
 
-    fn handle_impl(&self, msg_enum_path: &syn::Path) -> syn::Arm {
+    fn handle_impl(&self, msg_enum_ident: &syn::Ident) -> syn::Arm {
         let method_ident = &self.ident;
         let variant_ident = &self.variant_ident;
         let safe_input_names = &self.safe_input_names;
         parse_quote!(
-            #msg_enum_path::#variant_ident(#safe_input_names) => self.#method_ident(#safe_input_names),
+            #msg_enum_ident::#variant_ident(#safe_input_names) => self.#method_ident(#safe_input_names),
         )
     }
 
-    fn impl_remote(&self, msg_enum_path: &syn::Path) -> syn::ImplItem {
+    fn impl_remote(&self, msg_enum_ident: &syn::Ident) -> syn::ImplItem {
         let variant_ident = &self.variant_ident;
         let safe_input_names = &self.safe_input_names;
 
@@ -250,7 +328,7 @@ impl ActorTraitItem {
         inputs.extend(self.safe_input_args.clone());
 
         syn::ImplItem::Method(syn::ImplItemMethod {
-            attrs: Vec::new(),
+            attrs: vec![parse_quote!(#[allow(unused)])],
             vis: syn::Visibility::Inherited,
             defaultness: None,
             sig: syn::Signature {
@@ -268,7 +346,7 @@ impl ActorTraitItem {
             },
             block: if self.is_object_safe {
                 parse_quote!({
-                    self.inner().handle(#msg_enum_path::#variant_ident(#safe_input_names));
+                    self.inner().handle(#msg_enum_ident::#variant_ident(#safe_input_names));
                 })
             } else {
                 parse_quote!({
@@ -309,9 +387,12 @@ impl ActorTraitItem {
         })
     }
     fn ext_trait(&self) -> syn::TraitItem {
+        let method_ident = &self.ident;
+        let safe_input_names = &self.safe_input_names;
+
         let mut inputs = Punctuated::new();
-        inputs.push(parse_quote!(this: &::act_zero::Local<Self>));
-        inputs.extend(self.inputs.iter().cloned().map(syn::FnArg::Typed));
+        inputs.push(parse_quote!(&self));
+        inputs.extend(self.safe_input_args.clone());
 
         syn::TraitItem::Method(syn::TraitItemMethod {
             attrs: Vec::new(),
@@ -322,13 +403,62 @@ impl ActorTraitItem {
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
-                generics: self.generics.clone(),
+                generics: self
+                    .generics
+                    .replace_path(&parse_quote!(Self), &parse_quote!(Self::Inner)),
                 paren_token: Default::default(),
                 inputs,
                 variadic: None,
                 output: syn::ReturnType::Default,
             },
-            default: None, // TODO
+            default: Some(parse_quote!({
+                self.with(|inner| inner.#method_ident(#safe_input_names));
+            })),
+            semi_token: Some(Default::default()),
+        })
+    }
+    fn ext_trait_call(&self) -> syn::TraitItem {
+        let method_ident = &self.ident;
+        let tx_ident = format_ident!("tx");
+        let rx_ident = format_ident!("rx");
+
+        let call_ident = format_ident!("call_{}", method_ident);
+        let mut safe_input_names = self.safe_input_names.clone();
+        safe_input_names.pop();
+        safe_input_names.push(tx_ident.clone());
+
+        let mut inputs = Punctuated::new();
+        inputs.push(parse_quote!(&self));
+        inputs.extend(self.safe_input_args.clone());
+        let res_arg = inputs.pop().unwrap();
+        let res_ty = if let syn::FnArg::Typed(x) = res_arg.value() {
+            &x.ty
+        } else {
+            unreachable!()
+        };
+
+        syn::TraitItem::Method(syn::TraitItemMethod {
+            attrs: Vec::new(),
+            sig: syn::Signature {
+                constness: None,
+                asyncness: None,
+                unsafety: self.unsafety.clone(),
+                abi: None,
+                fn_token: Default::default(),
+                ident: call_ident,
+                generics: self
+                    .generics
+                    .replace_path(&parse_quote!(Self), &parse_quote!(Self::Inner)),
+                paren_token: Default::default(),
+                inputs,
+                variadic: None,
+                output: parse_quote!(-> ::act_zero::Receiver<<#res_ty as ::act_zero::SenderExt>::Item>),
+            },
+            default: Some(parse_quote!({
+                let (#tx_ident, #rx_ident) = ::act_zero::channel();
+                self.#method_ident(#safe_input_names);
+                #rx_ident
+            })),
             semi_token: Some(Default::default()),
         })
     }
@@ -427,8 +557,16 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
 
             let ident = method.sig.ident.clone();
             let variant_ident = camel_case_ident(&ident);
-            let safe_input_names = (0..inputs.len())
-                .map(|index| format_ident!("arg{}", index))
+            let safe_input_names: Punctuated<_, _> = inputs
+                .iter()
+                .enumerate()
+                .map(|(index, input)| {
+                    if let syn::Pat::Ident(name) = &*input.pat {
+                        sanitize_ident(&name.ident)
+                    } else {
+                        format_ident!("arg{}", index)
+                    }
+                })
                 .collect();
             let safe_input_args = inputs
                 .iter()
@@ -443,12 +581,19 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
                 })
                 .collect();
 
+            let is_callable = safe_input_names
+                .last()
+                .map(|name| name == "res" || name == "_res")
+                .unwrap_or_default();
+
             items.push(ActorTraitItem {
                 unsafety: method.sig.unsafety.clone(),
                 ident: method.sig.ident.clone(),
                 generics: method.sig.generics.clone(),
                 inputs,
+                default: method.default.clone(),
                 is_object_safe: is_concrete && !has_sized_bound,
+                is_callable,
                 variant_ident,
                 safe_input_names,
                 safe_input_args,
@@ -469,7 +614,6 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
     Ok(ActorTrait {
         unsafety: trait_item.unsafety.clone(),
         vis: trait_item.vis.clone(),
-        ident,
         generics: trait_item.generics.clone(),
         items,
         msg_enum_ident,
@@ -482,21 +626,34 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
     })
 }
 
-pub fn expand(trait_item: syn::ItemTrait) -> syn::Result<TokenStream2> {
+pub fn expand(mut trait_item: syn::ItemTrait) -> syn::Result<TokenStream2> {
     let spec = parse(&trait_item)?;
+
+    // Clear all default implementations
+    for item in &mut trait_item.items {
+        if let syn::TraitItem::Method(m) = item {
+            m.default = None;
+        }
+    }
 
     let internal_trait = spec.internal_trait();
     let message_enum = spec.message_enum();
     let handle_impl = spec.handle_impl();
+    let upcast_impl = spec.upcast_impl();
     let impl_remote = spec.impl_remote();
     let impl_local = spec.impl_local();
+    let ext_trait = spec.ext_trait();
+    let impl_ext = spec.impl_ext();
 
     Ok(quote! {
         #trait_item
         #internal_trait
         #message_enum
         #handle_impl
+        #upcast_impl
         #impl_remote
         #impl_local
+        #ext_trait
+        #impl_ext
     })
 }

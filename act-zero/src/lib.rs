@@ -10,10 +10,13 @@ pub mod async_fn;
 mod channel;
 pub mod remote;
 pub mod sync;
+pub mod utils;
 
 pub use addr::{Addr, AddrExt, WeakAddr};
+pub use channel::{channel, Receiver, Sender, SenderExt};
+
 use async_fn::{AsyncFnOnce, AsyncMutFnOnce};
-pub use channel::{channel, Receiver, Sender};
+use utils::IntoResult;
 
 #[fundamental]
 pub struct Local<T: Actor> {
@@ -25,21 +28,26 @@ pub trait Handle<M: Send + 'static> {
 }
 
 impl<T: Actor + Sync> Local<T> {
-    pub fn send(&self, f: impl AsyncFnOnce<T, Output = Result<(), T::Error>> + Send + 'static) {
+    pub fn send<F>(&self, f: F)
+    where
+        F: AsyncFnOnce<T> + Send + 'static,
+        F::Output: IntoResult<(), T::Error>,
+    {
         self.actor.run(f.map(|res, actor| {
-            (if let Err(e) = res {
+            (if let Err(e) = res.into_result() {
                 actor.errored(e)
             } else {
                 false
             }) || actor.should_terminate()
         }));
     }
-    pub fn send_mut(
-        &self,
-        f: impl AsyncMutFnOnce<T, Output = Result<(), T::Error>> + Send + 'static,
-    ) {
+    pub fn send_mut<F>(&self, f: F)
+    where
+        F: AsyncMutFnOnce<T> + Send + 'static,
+        F::Output: IntoResult<(), T::Error>,
+    {
         self.actor.run_mut(f.map(|res, actor| {
-            (if let Err(e) = res {
+            (if let Err(e) = res.into_result() {
                 actor.errored_mut(e)
             } else {
                 false

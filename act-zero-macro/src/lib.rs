@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 
 mod common;
+mod expand_impl;
 mod expand_trait;
 
 #[proc_macro_attribute]
@@ -17,7 +18,7 @@ fn act_zero_impl(item: TokenStream) -> syn::Result<TokenStream2> {
     let item: syn::Item = syn::parse(item)?;
     Ok(match item {
         syn::Item::Trait(trait_item) => expand_trait::expand(trait_item)?.into(),
-        syn::Item::Impl(_impl_item) => unimplemented!(),
+        syn::Item::Impl(impl_item) => expand_impl::expand(impl_item)?.into(),
         _ => {
             return Err(syn::Error::new_spanned(
                 item,

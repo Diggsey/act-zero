@@ -22,6 +22,15 @@ pub struct Receiver<T>(oneshot::Receiver<T>);
 #[derive(Debug)]
 pub struct Sender<T>(oneshot::Sender<T>);
 
+#[doc(hidden)]
+pub trait SenderExt {
+    type Item;
+}
+
+impl<T> SenderExt for Sender<T> {
+    type Item = T;
+}
+
 impl<T> Sender<T> {
     /// Completes this oneshot with a successful result.
     ///
