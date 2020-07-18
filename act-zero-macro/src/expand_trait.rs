@@ -108,7 +108,7 @@ impl ActorTrait {
         syn::ItemImpl {
             attrs: Vec::new(),
             defaultness: None,
-            unsafety: None,
+            unsafety: Some(Default::default()),
             impl_token: Default::default(),
             generics,
             trait_: Some((
@@ -635,6 +635,12 @@ pub fn expand(mut trait_item: syn::ItemTrait) -> syn::Result<TokenStream2> {
             m.default = None;
         }
     }
+
+    // Add marker supertraits
+    trait_item.colon_token = Default::default();
+    let supertraits: Punctuated<syn::TypeParamBound, token::Add> =
+        parse_quote!(::core::marker::Send + ::core::marker::Sync + 'static);
+    trait_item.supertraits.extend(supertraits);
 
     let internal_trait = spec.internal_trait();
     let message_enum = spec.message_enum();

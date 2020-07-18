@@ -1,6 +1,8 @@
 use std::sync::{Arc, Weak};
 
-pub trait UpcastFrom<T: ?Sized> {
+/// Safety: implementors must not extract `T` from the
+/// `Arc` or `Weak` passed in.
+pub unsafe trait UpcastFrom<T: ?Sized> {
     fn upcast(this: Arc<T>) -> Arc<Self>;
     fn upcast_weak(this: Weak<T>) -> Weak<Self>;
 }

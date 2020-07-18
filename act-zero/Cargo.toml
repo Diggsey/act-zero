@@ -1,6 +1,6 @@
 [package]
 name = "act-zero"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Diggory Blake <diggsey@googlemail.com>"]
 edition = "2018"
 description = "Ergonomic actor system"
@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 futures = "0.3.5"
-act-zero-macro = { version = "0.1.0", path = "../act-zero-macro" }
+act-zero-macro = { version = "0.2.0", path = "../act-zero-macro" }
 serde = { version = "1.0.114", features = ["derive"] }
 
 [dev-dependencies]

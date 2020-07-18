@@ -110,6 +110,12 @@ impl std::fmt::Display for Canceled {
 
 impl std::error::Error for Canceled {}
 
+impl From<Canceled> for Box<dyn std::error::Error + Send> {
+    fn from(e: Canceled) -> Self {
+        Box::new(e)
+    }
+}
+
 impl<T> Receiver<T> {
     /// Gracefully close this receiver, preventing any subsequent attempts to
     /// send to it.

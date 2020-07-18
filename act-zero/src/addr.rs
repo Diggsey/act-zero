@@ -13,7 +13,9 @@ pub trait AddrExt {
 pub struct WeakAddr<T: ?Sized>(pub(crate) Option<Weak<T>>);
 
 impl<T: ?Sized> WeakAddr<T> {
-    pub fn map<U: ?Sized>(self, f: impl FnOnce(Weak<T>) -> Weak<U>) -> WeakAddr<U> {
+    // This must be private as direct access to the `Arc` could allow the user
+    // to obtain a `Local` outside of an `Arc`.
+    fn map<U: ?Sized>(self, f: impl FnOnce(Weak<T>) -> Weak<U>) -> WeakAddr<U> {
         WeakAddr(self.0.map(f))
     }
     pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> WeakAddr<U> {
@@ -27,9 +29,9 @@ impl<T: ?Sized> Clone for WeakAddr<T> {
     }
 }
 
-impl<T> Default for WeakAddr<T> {
+impl<T: ?Sized> Default for WeakAddr<T> {
     fn default() -> Self {
-        Self(Default::default())
+        Self(None)
     }
 }
 
@@ -52,7 +54,9 @@ impl<M: Send + 'static, T: Handle<M>> Handle<M> for WeakAddr<T> {
 pub struct Addr<T: ?Sized>(pub(crate) Option<Arc<T>>);
 
 impl<T: ?Sized> Addr<T> {
-    pub fn map<U: ?Sized>(self, f: impl FnOnce(Arc<T>) -> Arc<U>) -> Addr<U> {
+    // This must be private as direct access to the `Arc` could allow the user
+    // to obtain a `Local` outside of an `Arc`.
+    fn map<U: ?Sized>(self, f: impl FnOnce(Arc<T>) -> Arc<U>) -> Addr<U> {
         Addr(self.0.map(f))
     }
     pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> Addr<U> {

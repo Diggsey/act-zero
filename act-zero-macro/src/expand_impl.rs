@@ -35,6 +35,12 @@ impl ActorTraitImpl {
     }
 }
 
+enum SelfTy {
+    Mut,
+    Ref,
+    Other(Box<syn::Type>),
+}
+
 struct ActorTraitImplItem {
     unsafety: Option<token::Unsafe>,
     asyncness: Option<token::Async>,
@@ -42,7 +48,7 @@ struct ActorTraitImplItem {
     generics: syn::Generics,
     inputs: Vec<syn::PatType>,
     output: syn::ReturnType,
-    is_mut: bool,
+    self_ty: SelfTy,
     block: syn::Block,
 
     // Derived state
@@ -95,11 +101,11 @@ impl ActorTraitImplItem {
         }
 
         let mut inner_inputs = Punctuated::new();
-        if self.is_mut {
-            inner_inputs.push(parse_quote!(#this_ident: &mut #self_ty));
-        } else {
-            inner_inputs.push(parse_quote!(#this_ident: &#self_ty));
-        }
+        inner_inputs.push(match &self.self_ty {
+            SelfTy::Mut => parse_quote!(#this_ident: &mut #self_ty),
+            SelfTy::Ref => parse_quote!(#this_ident: &#self_ty),
+            SelfTy::Other(t) => parse_quote!(#this_ident: #t),
+        });
         inner_inputs.push(parse_quote!((#tuple_pats): (#tuple_tys)));
         let block = self
             .block
@@ -146,16 +152,19 @@ impl ActorTraitImplItem {
                 variadic: None,
                 output: syn::ReturnType::Default,
             },
-            block: if self.is_mut {
-                parse_quote!({
+            block: match self.self_ty {
+                SelfTy::Mut => parse_quote!({
                     #inner_fn
                     this.send_mut(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args)))
-                })
-            } else {
-                parse_quote!({
+                }),
+                SelfTy::Ref => parse_quote!({
                     #inner_fn
                     this.send(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args)))
-                })
+                }),
+                SelfTy::Other(_) => parse_quote!({
+                    #inner_fn
+                    this.send_fut(inner #turbofish(this.addr(), (#tuple_args)))
+                }),
             },
         })
     }
@@ -192,9 +201,16 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
                 "Actor trait methods cannot be variadic",
             )?;
 
-            let is_mut = match method.sig.inputs.first() {
+            let self_ty = match method.sig.inputs.first() {
                 Some(syn::FnArg::Receiver(recv)) if is_valid_receiver(recv) => {
-                    recv.mutability.is_some()
+                    if recv.mutability.is_some() {
+                        SelfTy::Mut
+                    } else {
+                        SelfTy::Ref
+                    }
+                }
+                Some(syn::FnArg::Typed(p)) if *p.pat == parse_quote!(self) => {
+                    SelfTy::Other(p.ty.clone())
                 }
                 _ => {
                     return Err(syn::Error::new_spanned(
@@ -249,7 +265,7 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
                 generics: method.sig.generics.clone(),
                 inputs,
                 output: method.sig.output.clone(),
-                is_mut,
+                self_ty,
                 block: method.block.clone(),
 
                 // Derived state

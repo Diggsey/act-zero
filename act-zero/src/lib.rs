@@ -1,7 +1,9 @@
+use std::future::Future;
 use std::sync::Arc;
 
 pub use act_zero_macro::act_zero;
 use futures::task::{Spawn, SpawnError};
+use futures::FutureExt;
 
 mod addr;
 pub mod async_fn;
@@ -20,7 +22,7 @@ pub struct Local<T: Actor> {
     actor: sync::RwLock<T>,
 }
 
-pub trait Handle<M: Send + 'static> {
+pub trait Handle<M: Send + 'static>: Send + Sync + 'static {
     fn handle(&self, msg: M);
 }
 
@@ -51,6 +53,29 @@ impl<T: Actor + Sync> Local<T> {
             }) || actor.should_terminate()
         }));
     }
+    pub fn send_fut<F>(&self, f: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: IntoResult<(), T::Error>,
+    {
+        self.actor.run_fut(f.map(|res| {
+            if let Err(e) = res.into_result() {
+                T::errored_fut(e)
+            } else {
+                false
+            }
+        }));
+    }
+    pub fn addr(&self) -> Addr<Self> {
+        // Safety: we mustn't allow callers to access a `Local` outside
+        // of an `Arc`. Also, we mustn't add a destructor that calls this
+        // method.
+        unsafe {
+            let res = Arc::from_raw(self);
+            Arc::into_raw(res.clone());
+            Addr(Some(res))
+        }
+    }
 }
 
 pub trait Actor: Send + Sync + 'static {
@@ -63,8 +88,11 @@ pub trait Actor: Send + Sync + 'static {
         Ok(())
     }
 
-    fn errored(&self, _error: Self::Error) -> bool {
+    fn errored_fut(_error: Self::Error) -> bool {
         false
+    }
+    fn errored(&self, error: Self::Error) -> bool {
+        Self::errored_fut(error)
     }
     fn errored_mut(&mut self, error: Self::Error) -> bool {
         self.errored(error);

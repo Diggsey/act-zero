@@ -37,7 +37,7 @@ trait MyActorTrait<U: Send + 'static> {
 }
 
 #[act_zero]
-impl<U: Send + 'static> MyActorTrait<U> for MyActor {
+impl<U: Send + 'static + Default> MyActorTrait<U> for MyActor {
     async fn do_something(
         &mut self,
         _x: U,
@@ -48,9 +48,10 @@ impl<U: Send + 'static> MyActorTrait<U> for MyActor {
         Ok(())
     }
     async fn do_generic_thing<T: Send + 'static>(
-        &self,
+        self: Addr<Local<MyActor>>,
         _res: Sender<T>,
     ) -> Result<(), Box<dyn Error + Send>> {
+        self.call_do_something(U::default()).await?;
         Ok(())
     }
 }
