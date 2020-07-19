@@ -9,7 +9,7 @@ An actor system for Rust, designed with several goals in mind:
 - Executor agnostic.
 
 There are also some basic building blocks to support remoting, but the actual
-mechanism to trasfer messages is left to the user.
+mechanism to transfer messages is left to the user.
 
 Very little code is required to get started:
 

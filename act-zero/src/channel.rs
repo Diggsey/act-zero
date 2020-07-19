@@ -4,6 +4,7 @@ use std::task::{Context, Poll};
 
 use futures::channel::oneshot;
 
+/// Creates a new one-shot channel for sending values across asynchronous tasks.
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let (tx, rx) = oneshot::channel();
     (Sender(tx), Receiver(rx))

@@ -1,3 +1,14 @@
+//! This module contains tools for dealing with async functions. These are similar to the
+//! `FnOnce` trait from `std`, but they allow the lifetime of the returned future to be
+//! bound by the lifetime of the argument. The different variants correspond to the
+//! different reference types (`&T`, `&mut T`) but all variants consume `self` like `FnOnce`.
+//!
+//! For simplicity, only one argument is allowed. In addition, the returned future and its
+//! output are assumed to be `Send + 'static`.
+//!
+//! Note: typically you will not need to use these tools. The exist primarily for use by
+//! the expanded macro code from `#[act_zero]`.
+
 use std::future::Future;
 use std::marker::PhantomData;
 
@@ -5,10 +16,15 @@ use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 
+/// Trait for async methods which take `&T` as the argument type.
 pub trait AsyncFnOnce<T> {
+    /// Output type of the returned future.
     type Output: Send + 'static;
+    /// Call this function.
     fn call(self, arg: &T) -> BoxFuture<Self::Output>;
+    /// Call this function when `self` is boxed.
     fn call_boxed(self: Box<Self>, arg: &T) -> BoxFuture<Self::Output>;
+    /// Similar to `FutureExt::map`, except the callback also has access to the argument.
     fn map<G, R>(self, g: G) -> AsyncMap<Self, G>
     where
         G: FnOnce(Self::Output, &T) -> R,
@@ -16,6 +32,8 @@ pub trait AsyncFnOnce<T> {
     {
         AsyncMap { fun: self, g }
     }
+    /// Bind the output of this async function to this oneshot channel: when the future
+    /// completes, the output will be sent on the channel.
     fn bind_output(self, tx: oneshot::Sender<Self::Output>) -> BindOutput<Self, Self::Output>
     where
         Self: Sized,
@@ -24,10 +42,15 @@ pub trait AsyncFnOnce<T> {
     }
 }
 
+/// Trait for async methods which take `&mut T` as the argument type.
 pub trait AsyncMutFnOnce<T> {
+    /// Output type of the returned future.
     type Output: Send + 'static;
+    /// Call this function.
     fn call(self, arg: &mut T) -> BoxFuture<Self::Output>;
+    /// Call this function when `self` is boxed.
     fn call_boxed(self: Box<Self>, arg: &mut T) -> BoxFuture<Self::Output>;
+    /// Similar to `FutureExt::map`, except the callback also has access to the argument.
     fn map<G, R>(self, g: G) -> AsyncMap<Self, G>
     where
         G: FnOnce(Self::Output, &mut T) -> R,
@@ -35,6 +58,8 @@ pub trait AsyncMutFnOnce<T> {
     {
         AsyncMap { fun: self, g }
     }
+    /// Bind the output of this async function to this oneshot channel: when the future
+    /// completes, the output will be sent on the channel.
     fn bind_output(self, tx: oneshot::Sender<Self::Output>) -> BindOutput<Self, Self::Output>
     where
         Self: Sized,
@@ -69,6 +94,7 @@ where
     }
 }
 
+/// Return type of `AsyncFnOnce::map` and `AsyncMutFnOnce::map`.
 pub struct AsyncMap<F, G> {
     fun: F,
     g: G,
@@ -118,6 +144,7 @@ where
     }
 }
 
+/// Return type of `AsyncFnOnce::bind_output` and `AsyncMutFnOnce::bind_output`.
 pub struct BindOutput<F, R> {
     fun: F,
     tx: oneshot::Sender<R>,
@@ -161,6 +188,12 @@ where
     }
 }
 
+/// Rust does not support async closures, and is incapable of inferring the correct lifetimes
+/// for closures returning an `async move { ... }` block which captures a non-'static argument
+/// to the closure.
+/// To solve this problem, we introduce this explicit closure type, which takes a stand-alone
+/// `async fn` expecting two arguments, and binds the second argument to a closure "upvar"
+/// passed in at construction.
 pub struct Closure<R, F, P> {
     fun: F,
     upvar: P,
@@ -168,6 +201,8 @@ pub struct Closure<R, F, P> {
 }
 
 impl<R, F, P> Closure<R, F, P> {
+    /// Constructor.
+    /// `fun` should implement `ClosureFn` or `ClosureFnMut` for this to be useful.
     pub fn new(fun: F, upvar: P) -> Self {
         Self {
             fun,
@@ -177,13 +212,23 @@ impl<R, F, P> Closure<R, F, P> {
     }
 }
 
+/// We can't even directly express the lifetime bounds of an `async fn` directly, so we
+/// are forced to introduce a trait just to write the required bounds.
+/// This trait is for the case when the first argument is `&T`.
 pub trait ClosureFn<'a, T, P, R> {
+    /// Type of the future returned by this async fn.
     type Future: Future<Output = R> + Send + 'a;
+    /// Call this async fn with two arguments.
     fn call_closure(self, arg1: &'a T, arg2: P) -> Self::Future;
 }
 
+/// We can't even directly express the lifetime bounds of an `async fn` directly, so we
+/// are forced to introduce a trait just to write the required bounds.
+/// This trait is for the case when the first argument is `&mut T`.
 pub trait ClosureFnMut<'a, T, P, R> {
+    /// Type of the future returned by this async fn.
     type Future: Future<Output = R> + Send + 'a;
+    /// Call this async fn with two arguments.
     fn call_closure(self, arg1: &'a mut T, arg2: P) -> Self::Future;
 }
 

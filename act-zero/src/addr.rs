@@ -3,12 +3,15 @@ use std::sync::{Arc, Weak};
 use super::Handle;
 use crate::utils::UpcastFrom;
 
+#[doc(hidden)]
 pub trait AddrExt {
     type Inner: ?Sized;
 
     fn with<F: FnOnce(&Self::Inner)>(&self, f: F);
 }
 
+/// Weak reference to an actor. If the actor has been dropped, messages sent to the actor will
+/// also be dropped.
 #[derive(Debug)]
 pub struct WeakAddr<T: ?Sized>(pub(crate) Option<Weak<T>>);
 
@@ -18,6 +21,7 @@ impl<T: ?Sized> WeakAddr<T> {
     fn map<U: ?Sized>(self, f: impl FnOnce(Weak<T>) -> Weak<U>) -> WeakAddr<U> {
         WeakAddr(self.0.map(f))
     }
+    /// Upcast this actor reference to a trait object (`Addr<dyn ActorTrait>`)
     pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> WeakAddr<U> {
         self.map(UpcastFrom::upcast_weak)
     }
@@ -50,6 +54,9 @@ impl<M: Send + 'static, T: Handle<M>> Handle<M> for WeakAddr<T> {
     }
 }
 
+/// Strong reference to an actor. This will not prevent the actor from stopping of its own
+/// volition, but the actor will not be automatically stopped as long as a strong reference
+/// still exists. If the actor has stopped, messages sent to the actor will be dropped.
 #[derive(Debug)]
 pub struct Addr<T: ?Sized>(pub(crate) Option<Arc<T>>);
 
@@ -59,9 +66,11 @@ impl<T: ?Sized> Addr<T> {
     fn map<U: ?Sized>(self, f: impl FnOnce(Arc<T>) -> Arc<U>) -> Addr<U> {
         Addr(self.0.map(f))
     }
+    /// Upcast this actor reference to a trait object (`Addr<dyn ActorTrait>`)
     pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> Addr<U> {
         self.map(UpcastFrom::upcast)
     }
+    /// Downgrade to a weak reference.
     pub fn downgrade(&self) -> WeakAddr<T> {
         WeakAddr(self.0.as_ref().map(Arc::downgrade))
     }
