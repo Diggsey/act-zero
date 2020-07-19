@@ -23,6 +23,9 @@ jobs:
         with:
           command: publish
           args: --manifest-path act-zero-macro/Cargo.toml
+      - name: Wait for crates.io index to update
+        run: |
+          sleep 5
       - uses: actions-rs/cargo@v1
         with:
           command: publish
