@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::sync::{Arc, Weak};
 
 use super::Handle;
@@ -12,7 +13,6 @@ pub trait AddrExt {
 
 /// Weak reference to an actor. If the actor has been dropped, messages sent to the actor will
 /// also be dropped.
-#[derive(Debug)]
 pub struct WeakAddr<T: ?Sized>(pub(crate) Option<Weak<T>>);
 
 impl<T: ?Sized> WeakAddr<T> {
@@ -24,6 +24,12 @@ impl<T: ?Sized> WeakAddr<T> {
     /// Upcast this actor reference to a trait object (`Addr<dyn ActorTrait>`)
     pub fn upcast<U: ?Sized + UpcastFrom<T>>(self) -> WeakAddr<U> {
         self.map(UpcastFrom::upcast_weak)
+    }
+}
+
+impl<T: ?Sized> Debug for WeakAddr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {{..}}", std::any::type_name::<Self>())
     }
 }
 
@@ -57,7 +63,6 @@ impl<M: Send + 'static, T: Handle<M>> Handle<M> for WeakAddr<T> {
 /// Strong reference to an actor. This will not prevent the actor from stopping of its own
 /// volition, but the actor will not be automatically stopped as long as a strong reference
 /// still exists. If the actor has stopped, messages sent to the actor will be dropped.
-#[derive(Debug)]
 pub struct Addr<T: ?Sized>(pub(crate) Option<Arc<T>>);
 
 impl<T: ?Sized> Addr<T> {
@@ -85,6 +90,12 @@ impl<T: ?Sized> Clone for Addr<T> {
 impl<T: ?Sized> Default for Addr<T> {
     fn default() -> Self {
         Self(Default::default())
+    }
+}
+
+impl<T: ?Sized> Debug for Addr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {{..}}", std::any::type_name::<Self>())
     }
 }
 

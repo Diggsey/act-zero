@@ -82,12 +82,13 @@ mod sync;
 pub mod utils;
 
 pub use addr::{Addr, AddrExt, WeakAddr};
-pub use channel::{channel, Receiver, Sender, SenderExt};
+pub use channel::{channel, Canceled, Cancellation, Receiver, Sender, SenderExt};
 
 use async_fn::{AsyncFnOnce, AsyncMutFnOnce};
 use utils::IntoResult;
 
 /// Type of an actor running locally.
+#[derive(Debug)]
 pub struct Local<T: Actor> {
     actor: sync::RwLock<T>,
 }

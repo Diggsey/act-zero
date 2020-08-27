@@ -1,3 +1,4 @@
+use std::fmt::{self, Debug};
 use std::future::Future;
 
 use futures::channel::mpsc;
@@ -21,6 +22,12 @@ enum Item<T> {
 pub struct RwLock<T> {
     channel: mpsc::UnboundedSender<Item<T>>,
     futs: mpsc::UnboundedSender<FutureItem>,
+}
+
+impl<T> Debug for RwLock<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {{..}}", std::any::type_name::<Self>())
+    }
 }
 
 async fn rwlock_run_shared_tasks<'a, T>(

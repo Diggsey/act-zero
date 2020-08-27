@@ -8,7 +8,7 @@ use super::Addr;
 
 /// Generic actor proxy type. Implements the actor trait when `T` implements `Handle<M>` for the
 /// message type corresponding to that actor trait.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Remote<T>(T);
 
 impl<T> Remote<T> {

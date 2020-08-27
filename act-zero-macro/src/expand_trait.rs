@@ -1,9 +1,11 @@
 use proc_macro2::TokenStream as TokenStream2;
 
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote};
+use syn::visit_mut::VisitMut;
 use syn::{parse_quote, punctuated::Punctuated, token};
 
 use crate::common::*;
+use crate::receiver::ReplaceReceiver;
 
 struct ActorTrait {
     vis: syn::Visibility,
@@ -19,6 +21,9 @@ struct ActorTrait {
     trait_path: syn::Path,
     ext_trait_ident: syn::Ident,
     ext_trait_path: syn::Path,
+
+    // Span data
+    original_trait: syn::ItemTrait,
 }
 
 fn doc_hidden_attr() -> syn::Attribute {
@@ -32,12 +37,12 @@ impl ActorTrait {
             vis: self.vis.clone(),
             unsafety: None,
             auto_token: None,
-            trait_token: Default::default(),
+            trait_token: self.original_trait.trait_token,
             ident: self.internal_trait_ident.clone(),
             generics: self.generics.clone(),
             colon_token: Some(Default::default()),
             supertraits: parse_quote!(::core::marker::Sized + ::act_zero::Actor),
-            brace_token: Default::default(),
+            brace_token: self.original_trait.brace_token,
             items: self
                 .items
                 .iter()
@@ -120,13 +125,13 @@ impl ActorTrait {
             brace_token: Default::default(),
             items: vec![
                 parse_quote!(
-                    fn upcast(this: ::std::sync::Arc<#t_arg>) -> ::std::sync::Arc<Self> {
-                        this
+                    fn upcast(_self: ::std::sync::Arc<#t_arg>) -> ::std::sync::Arc<Self> {
+                        _self
                     }
                 ),
                 parse_quote!(
-                    fn upcast_weak(this: ::std::sync::Weak<#t_arg>) -> ::std::sync::Weak<Self> {
-                        this
+                    fn upcast_weak(_self: ::std::sync::Weak<#t_arg>) -> ::std::sync::Weak<Self> {
+                        _self
                     }
                 ),
             ],
@@ -258,9 +263,8 @@ struct ActorTraitItem {
 
 impl ActorTraitItem {
     fn internal_trait(&self) -> syn::TraitItem {
-        let this = this_ident();
         let mut inputs = Punctuated::new();
-        inputs.push(parse_quote!(#this: &::act_zero::Local<Self>));
+        inputs.push(parse_quote!(_self: &::act_zero::Local<Self>));
         inputs.extend(self.inputs.iter().cloned().map(syn::FnArg::Typed));
 
         syn::TraitItem::Method(syn::TraitItemMethod {
@@ -279,10 +283,9 @@ impl ActorTraitItem {
                 output: syn::ReturnType::Default,
             },
             default: self.default.as_ref().map(|block| {
-                let ts = block
-                    .to_token_stream()
-                    .replace_ident(&parse_quote!(self), &this);
-                parse_quote!(#ts)
+                let mut block = block.clone();
+                ReplaceReceiver::with(parse_quote!(Self)).visit_block_mut(&mut block);
+                block
             }),
             semi_token: Some(Default::default()),
         })
@@ -394,6 +397,13 @@ impl ActorTraitItem {
         inputs.push(parse_quote!(&self));
         inputs.extend(self.safe_input_args.clone());
 
+        let mut generics = self.generics.clone();
+        PathReplacer {
+            old: parse_quote!(Self),
+            new: parse_quote!(Self::Inner),
+        }
+        .visit_generics_mut(&mut generics);
+
         syn::TraitItem::Method(syn::TraitItemMethod {
             attrs: Vec::new(),
             sig: syn::Signature {
@@ -403,9 +413,7 @@ impl ActorTraitItem {
                 abi: None,
                 fn_token: Default::default(),
                 ident: self.ident.clone(),
-                generics: self
-                    .generics
-                    .replace_path(&parse_quote!(Self), &parse_quote!(Self::Inner)),
+                generics,
                 paren_token: Default::default(),
                 inputs,
                 variadic: None,
@@ -437,6 +445,13 @@ impl ActorTraitItem {
             unreachable!()
         };
 
+        let mut generics = self.generics.clone();
+        PathReplacer {
+            old: parse_quote!(Self),
+            new: parse_quote!(Self::Inner),
+        }
+        .visit_generics_mut(&mut generics);
+
         syn::TraitItem::Method(syn::TraitItemMethod {
             attrs: Vec::new(),
             sig: syn::Signature {
@@ -446,9 +461,7 @@ impl ActorTraitItem {
                 abi: None,
                 fn_token: Default::default(),
                 ident: call_ident,
-                generics: self
-                    .generics
-                    .replace_path(&parse_quote!(Self), &parse_quote!(Self::Inner)),
+                generics,
                 paren_token: Default::default(),
                 inputs,
                 variadic: None,
@@ -623,6 +636,9 @@ fn parse(trait_item: &syn::ItemTrait) -> syn::Result<ActorTrait> {
         internal_trait_path,
         ext_trait_ident,
         ext_trait_path,
+
+        // Spanned tokens
+        original_trait: trait_item.clone(),
     })
 }
 

@@ -1,9 +1,13 @@
 use proc_macro2::TokenStream as TokenStream2;
 
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote, quote_spanned};
+use syn::spanned::Spanned;
+use syn::visit_mut::VisitMut;
 use syn::{parse_quote, punctuated::Punctuated, token};
 
 use crate::common::*;
+use crate::receiver::ReplaceReceiver;
+use crate::respan::respan;
 
 struct ActorTraitImpl {
     unsafety: Option<token::Unsafe>,
@@ -13,6 +17,9 @@ struct ActorTraitImpl {
 
     // Derived state
     internal_trait_path: syn::Path,
+
+    // Span data
+    original_impl: syn::ItemImpl,
 }
 
 impl ActorTraitImpl {
@@ -21,11 +28,15 @@ impl ActorTraitImpl {
             attrs: Vec::new(),
             defaultness: None,
             unsafety: self.unsafety,
-            impl_token: Default::default(),
+            impl_token: self.original_impl.impl_token,
             generics: self.generics.clone(),
-            trait_: Some((None, self.internal_trait_path.clone(), Default::default())),
+            trait_: Some((
+                None,
+                self.internal_trait_path.clone(),
+                self.original_impl.trait_.as_ref().unwrap().2,
+            )),
             self_ty: self.self_ty.clone(),
-            brace_token: Default::default(),
+            brace_token: self.original_impl.brace_token,
             items: self
                 .items
                 .iter()
@@ -54,6 +65,10 @@ struct ActorTraitImplItem {
     // Derived state
     safe_input_names: Punctuated<syn::Ident, token::Comma>,
     safe_input_args: Punctuated<syn::FnArg, token::Comma>,
+
+    // Span data
+    original_item: syn::ImplItemMethod,
+    receiver_span: proc_macro2::Span,
 }
 
 fn combine_generics(a: &syn::Generics, b: &syn::Generics) -> syn::Generics {
@@ -80,9 +95,9 @@ fn combine_generics(a: &syn::Generics, b: &syn::Generics) -> syn::Generics {
 impl ActorTraitImplItem {
     fn impl_internal(&self, impl_generics: &syn::Generics, self_ty: &syn::Type) -> syn::ImplItem {
         let mut inputs = Punctuated::new();
-        inputs.push(parse_quote!(this: &::act_zero::Local<Self>));
+        let self_arg = quote_spanned!(self.receiver_span => _self: &::act_zero::Local<Self>);
+        inputs.push(parse_quote!(#self_arg));
         inputs.extend(self.safe_input_args.iter().cloned());
-        let this_ident = this_ident();
 
         let mut tuple_args = self.safe_input_names.clone();
         if !tuple_args.empty_or_trailing() {
@@ -101,16 +116,19 @@ impl ActorTraitImplItem {
         }
 
         let mut inner_inputs = Punctuated::new();
-        inner_inputs.push(match &self.self_ty {
-            SelfTy::Mut => parse_quote!(#this_ident: &mut #self_ty),
-            SelfTy::Ref => parse_quote!(#this_ident: &#self_ty),
-            SelfTy::Other(t) => parse_quote!(#this_ident: #t),
-        });
-        inner_inputs.push(parse_quote!((#tuple_pats): (#tuple_tys)));
-        let block = self
-            .block
-            .to_token_stream()
-            .replace_ident(&format_ident!("self"), &this_ident);
+        inner_inputs.push(respan(
+            &match &self.self_ty {
+                SelfTy::Mut => parse_quote!(_self: &mut #self_ty),
+                SelfTy::Ref => parse_quote!(_self: &#self_ty),
+                SelfTy::Other(t) => parse_quote!(_self: #t),
+            },
+            self.receiver_span,
+        ));
+
+        let last_input = quote_spanned!(self.ident.span() => (#tuple_pats): (#tuple_tys));
+        inner_inputs.push(parse_quote!(#last_input));
+        let mut block = self.block.clone();
+        ReplaceReceiver::with(self_ty.clone()).visit_block_mut(&mut block);
 
         let combined_generics = combine_generics(impl_generics, &self.generics);
         let ty_generics = combined_generics.split_for_impl().1;
@@ -124,15 +142,15 @@ impl ActorTraitImplItem {
                 asyncness: self.asyncness,
                 unsafety: None,
                 abi: None,
-                fn_token: Default::default(),
-                ident: parse_quote!(inner),
+                fn_token: self.original_item.sig.fn_token,
+                ident: respan(&format_ident!("inner"), self.original_item.sig.ident.span()),
                 generics: combined_generics.clone(),
-                paren_token: Default::default(),
+                paren_token: self.original_item.sig.paren_token,
                 inputs: inner_inputs,
                 variadic: None,
                 output: self.output.clone(),
             },
-            block: parse_quote!(#block),
+            block: Box::new(block),
         };
 
         syn::ImplItem::Method(syn::ImplItemMethod {
@@ -144,27 +162,31 @@ impl ActorTraitImplItem {
                 asyncness: None,
                 unsafety: self.unsafety,
                 abi: None,
-                fn_token: Default::default(),
+                fn_token: self.original_item.sig.fn_token,
                 ident: self.ident.clone(),
                 generics: self.generics.clone(),
-                paren_token: Default::default(),
+                paren_token: self.original_item.sig.paren_token,
                 inputs,
                 variadic: None,
                 output: syn::ReturnType::Default,
             },
-            block: match self.self_ty {
-                SelfTy::Mut => parse_quote!({
+            block: {
+                let span = self.ident.span();
+                let glue = match self.self_ty {
+                    SelfTy::Mut => {
+                        quote_spanned!(span => _self.send_mut(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args))))
+                    }
+                    SelfTy::Ref => {
+                        quote_spanned!(span => _self.send(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args))))
+                    }
+                    SelfTy::Other(_) => {
+                        quote_spanned!(span => _self.send_fut(inner #turbofish(_self.addr(), (#tuple_args))))
+                    }
+                };
+                parse_quote!({
                     #inner_fn
-                    this.send_mut(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args)))
-                }),
-                SelfTy::Ref => parse_quote!({
-                    #inner_fn
-                    this.send(::act_zero::async_fn::Closure::new(inner #turbofish, (#tuple_args)))
-                }),
-                SelfTy::Other(_) => parse_quote!({
-                    #inner_fn
-                    this.send_fut(inner #turbofish(this.addr(), (#tuple_args)))
-                }),
+                    #glue
+                })
             },
         })
     }
@@ -201,16 +223,17 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
                 "Actor trait methods cannot be variadic",
             )?;
 
-            let self_ty = match method.sig.inputs.first() {
-                Some(syn::FnArg::Receiver(recv)) if is_valid_receiver(recv) => {
+            let (self_ty, receiver_span) = match method.sig.inputs.first() {
+                Some(syn::FnArg::Receiver(recv)) if is_valid_receiver(recv) => (
                     if recv.mutability.is_some() {
                         SelfTy::Mut
                     } else {
                         SelfTy::Ref
-                    }
-                }
+                    },
+                    recv.self_token.span,
+                ),
                 Some(syn::FnArg::Typed(p)) if *p.pat == parse_quote!(self) => {
-                    SelfTy::Other(p.ty.clone())
+                    (SelfTy::Other(p.ty.clone()), p.span())
                 }
                 _ => {
                     return Err(syn::Error::new_spanned(
@@ -271,6 +294,10 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
                 // Derived state
                 safe_input_names,
                 safe_input_args,
+
+                // Span data
+                original_item: method.clone(),
+                receiver_span,
             })
         }
     }
@@ -297,6 +324,9 @@ fn parse(item_impl: &syn::ItemImpl) -> syn::Result<ActorTraitImpl> {
         self_ty: item_impl.self_ty.clone(),
         items,
         internal_trait_path,
+
+        // Span data
+        original_impl: item_impl.clone(),
     })
 }
 
