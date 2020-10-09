@@ -392,9 +392,11 @@ impl<T: ?Sized> WeakAddr<T> {
             send_fut: &send_unreachable,
         }
     }
+    // TODO: Replace this with an implementation using `Weak::as_ptr` once support for
+    // unsized values hits stable.
     fn ptr(&self) -> *const () {
-        if let Some(inner) = &self.inner {
-            Weak::as_ptr(inner) as *const ()
+        if let Some(inner) = upgrade_weak(&self.inner) {
+            Arc::as_ptr(&inner) as *const ()
         } else {
             ptr::null()
         }
