@@ -16,7 +16,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --all-features --workspace --all-targets
+          args: --all-features
 
   fmt:
     name: Rustfmt
@@ -32,7 +32,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check
+          args: -- --check
 
   clippy:
     name: Clippy
@@ -48,4 +48,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-features --workspace --all-targets -- -D warnings
+          args: --all-features -- -D warnings
