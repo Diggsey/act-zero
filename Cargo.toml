@@ -22,3 +22,7 @@ async-trait = "0.1.41"
 log = "0.4.11"
 tokio = { version = "0.2.22", features = ["rt-core", "time"], optional = true }
 async-std = { version = "1.6.5", optional = true }
+
+[dev-dependencies]
+tokio = { version = "0.2.22", features = ["macros"] }
+async-std = { version = "1.6.5", features = ["attributes"] }

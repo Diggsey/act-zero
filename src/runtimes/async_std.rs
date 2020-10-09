@@ -34,3 +34,27 @@ impl timer::SupportsTimers for Runtime {
         async_std::task::sleep(duration).boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::*;
+
+    struct Echo;
+
+    impl Actor for Echo {}
+    impl Echo {
+        async fn echo(&mut self, x: &'static str) -> ActorResult<&'static str> {
+            Ok(x)
+        }
+    }
+
+    #[async_std::test]
+    async fn smoke_test() {
+        let addr = spawn_actor(Echo);
+
+        let res = call!(addr.echo("test")).await.unwrap();
+
+        assert_eq!(res, "test");
+    }
+}

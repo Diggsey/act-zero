@@ -50,6 +50,9 @@
 //!     })
 //! }
 //! ```
+//!
+//! For mixing traits and actors, it's recommended to use the `async_trait` crate
+//! to allow using async methods in traits.
 
 #![deny(missing_docs)]
 

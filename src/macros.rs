@@ -73,8 +73,11 @@ macro_rules! __impl_send {
             $(
                 let $moved = $args;
             )*
-            $crate::AddrLike::send_mut(&$addr, Box::new(move |x| {
+            let addr = &$addr;
+            let addr2 = addr.clone();
+            $crate::AddrLike::send_mut(addr, Box::new(move |x| {
                 $crate::hidden::FutureExt::boxed(async move {
+                    let _addr = addr2;
                     if let Err(e) = $crate::IntoActorResult::into_actor_result(x.$method($($moved),*).await) {
                         $crate::Actor::error(x, e).await
                     } else {
@@ -91,9 +94,12 @@ macro_rules! __impl_send {
             $(
                 let $moved = $args;
             )*
+            let addr = &$addr;
+            let addr2 = addr.clone();
             let (tx, rx) = $crate::hidden::oneshot::channel();
-            $addr.send_mut(Box::new(move |x| {
+            $crate::AddrLike::send_mut(addr, Box::new(move |x| {
                 $crate::hidden::FutureExt::boxed(async move {
+                    let _addr = addr2;
                     match $crate::IntoActorResult::into_actor_result(x.$method($($moved),*).await) {
                         Ok(x) => {
                             let _ = tx.send(x);

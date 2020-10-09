@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::cmp::Ordering;
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
@@ -28,7 +28,11 @@ async fn mutex_task<T>(
         let current_item = loop {
             if select_biased! {
                 _ = futs.select_next_some() => false,
-                item = mut_channel.select_next_some() => break item,
+                item = mut_channel.next() => if let Some(item) = item {
+                    break item
+                } else {
+                    true
+                },
                 item = fut_channel.select_next_some() => {
                     futs.push(item);
                     false
@@ -100,7 +104,7 @@ fn send_unreachable<T>(_: &Arc<dyn Any + Send + Sync>, _: T) {
 
 /// Trait provides methods for spawning futures onto an actor. Implemented by
 /// `Addr` and `WeakAddr` alike.
-pub trait AddrLike: Send + Sync + Clone + 'static {
+pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
     /// Type of the actor reference by this address.
     type Actor: Actor + ?Sized;
 
@@ -137,9 +141,14 @@ pub struct Addr<T: ?Sized + 'static> {
     send_fut: &'static (dyn Fn(&Arc<dyn Any + Send + Sync>, FutItem) + Send + Sync),
 }
 
-impl<T: ?Sized> fmt::Debug for Addr<T> {
+impl<T: ?Sized> Debug for Addr<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {{..}}", std::any::type_name::<Self>())
+        write!(
+            f,
+            "{} {{ detached: {} }}",
+            std::any::type_name::<Self>(),
+            self.inner.is_none()
+        )
     }
 }
 
@@ -266,7 +275,7 @@ impl<T: ?Sized + Send + 'static> Addr<T> {
     pub fn downgrade(&self) -> WeakAddr<T> {
         WeakAddr {
             inner: self.inner.as_ref().map(Arc::downgrade),
-            send_mut: &|_, _| (),
+            send_mut: self.send_mut,
             send_fut: self.send_fut,
         }
     }
@@ -314,7 +323,7 @@ impl<T: ?Sized> Clone for WeakAddr<T> {
     }
 }
 
-impl<T: ?Sized> fmt::Debug for WeakAddr<T> {
+impl<T: ?Sized> Debug for WeakAddr<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {{..}}", std::any::type_name::<Self>())
     }
