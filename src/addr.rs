@@ -7,12 +7,12 @@ use std::sync::{Arc, Weak};
 use std::{mem, ptr};
 
 use futures::channel::{mpsc, oneshot};
-use futures::future::{BoxFuture, FutureExt};
+use futures::future::{self, BoxFuture, FutureExt};
 use futures::select_biased;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::task::{Spawn, SpawnError, SpawnExt};
 
-use crate::{send, Actor};
+use crate::{send, Actor, Termination};
 
 type MutItem<T> = Box<dyn for<'a> FnOnce(&'a mut T) -> BoxFuture<'a, bool> + Send>;
 type FutItem = BoxFuture<'static, ()>;
@@ -115,16 +115,29 @@ pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
     fn send_fut(&self, fut: impl Future<Output = ()> + Send + 'static);
 
     /// Spawn a future onto the actor and provide the means to get back
-    /// the result.
+    /// the result. The future will be cancelled if the receiver is
+    /// dropped before it has completed.
     fn call_fut<R: Send + 'static>(
         &self,
         fut: impl Future<Output = R> + Send + 'static,
     ) -> oneshot::Receiver<R> {
-        let (tx, rx) = oneshot::channel();
+        let (mut tx, rx) = oneshot::channel();
         self.send_fut(async move {
-            let _ = tx.send(fut.await);
+            select_biased! {
+                _ = tx.cancellation().fuse() => {}
+                res = fut.fuse() => {
+                    let _ = tx.send(res);
+                }
+            };
         });
         rx
+    }
+
+    /// Returns a future which resolves when the actor terminates. If the
+    /// actor has already terminated, or if this address is detached, the
+    /// future will resolve immediately.
+    fn termination(&self) -> Termination {
+        Termination(self.call_fut(future::pending()))
     }
 }
 

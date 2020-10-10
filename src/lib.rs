@@ -61,10 +61,12 @@ mod addr;
 mod macros;
 pub mod runtimes;
 pub mod timer;
+mod utils;
 
 pub use actor::*;
 pub use addr::*;
 pub use macros::*;
+pub use utils::*;
 
 #[doc(hidden)]
 pub mod hidden {
