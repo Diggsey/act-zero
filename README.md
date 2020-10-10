@@ -8,9 +8,6 @@ An actor system for Rust, designed with several goals in mind:
 - Embraces async/await.
 - Executor agnostic.
 
-There are also some basic building blocks to support remoting, but the actual
-mechanism to transfer messages is left to the user.
-
 Very little code is required to get started:
 
 ```rust
@@ -23,24 +20,15 @@ struct SimpleGreeter {
     number_of_greets: i32,
 }
 
-impl Actor for SimpleGreeter {
-    type Error = ();
-}
+impl Actor for SimpleGreeter {}
 
-#[act_zero]
-trait Greeter {
-    fn greet(&self, name: String, res: Sender<String>);
-}
-
-#[act_zero]
-impl Greeter for SimpleGreeter {
-    async fn greet(&mut self, name: String, res: Sender<String>) {
+impl SimpleGreeter {
+    async fn greet(&mut self, name: String) -> ActorResult<String> {
         self.number_of_greets += 1;
-        res.send(format!(
+        Ok(format!(
             "Hello, {}. You are number {}!",
             name, self.number_of_greets
         ))
-        .ok();
     }
 }
 
@@ -48,17 +36,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut pool = LocalPool::new();
     let spawner = pool.spawner();
     pool.run_until(async move {
-        let actor_ref = spawn(
+        let actor_ref = Addr::new(
             &spawner,
             SimpleGreeter {
                 number_of_greets: 0,
             },
         )?;
 
-        let greeting = actor_ref.call_greet("John".into()).await?;
+        let greeting = call!(actor_ref.greet("John".into())).await?;
         println!("{}", greeting);
 
-        let greeting = actor_ref.call_greet("Emma".into()).await?;
+        let greeting = call!(actor_ref.greet("Emma".into())).await?;
         println!("{}", greeting);
         Ok(())
     })
