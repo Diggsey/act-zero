@@ -4,7 +4,7 @@ macro_rules! __impl_send {
     (
         @parse $caller:tt receiver=[$($receiver:tt)*] tokens = [. $method:ident ($($args:expr),*)]
     ) => {
-        $crate::__impl_send!(@move_args $caller args=[$($args)*] input=[$($receiver)*, $method])
+        $crate::__impl_send!(@move_args $caller args=[$($args),*] input=[$($receiver)*, $method])
     };
     (
         @parse $caller:tt receiver=[$($receiver:tt)*] tokens = [$token:tt $($tokens:tt)*]
@@ -73,9 +73,11 @@ macro_rules! __impl_send {
             $(
                 let $moved = $args;
             )*
-            let addr = &$addr;
+            let addr = $crate::AsAddr::as_addr(&$addr);
             let addr2 = addr.clone();
+            $crate::hidden::trace!("send!({}::{}(...))", $crate::hidden::type_name_of_addr(addr).as_display(), stringify!($method));
             $crate::AddrLike::send_mut(addr, Box::new(move |x| {
+                $crate::hidden::trace!("{}::{}(...)", $crate::hidden::type_name_of_val(x).as_display(), stringify!($method));
                 $crate::hidden::FutureExt::boxed(async move {
                     let _addr = addr2;
                     if let Err(e) = $crate::IntoActorResult::into_actor_result(x.$method($($moved),*).await) {
@@ -94,10 +96,12 @@ macro_rules! __impl_send {
             $(
                 let $moved = $args;
             )*
-            let addr = &$addr;
+            let addr = $crate::AsAddr::as_addr(&$addr);
             let addr2 = addr.clone();
+            $crate::hidden::trace!("call!({}::{}(...))", $crate::hidden::type_name_of_addr(addr).as_display(), stringify!($method));
             let (tx, rx) = $crate::hidden::oneshot::channel();
             $crate::AddrLike::send_mut(addr, Box::new(move |x| {
+                $crate::hidden::trace!("{}::{}(...)", $crate::hidden::type_name_of_val(x).as_display(), stringify!($method));
                 $crate::hidden::FutureExt::boxed(async move {
                     let _addr = addr2;
                     match $crate::IntoActorResult::into_actor_result(x.$method($($moved),*).await) {
@@ -109,7 +113,7 @@ macro_rules! __impl_send {
                     }
                 })
             }));
-            rx
+            $crate::Produces::Deferred(rx)
         }
     };
 }

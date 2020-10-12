@@ -7,13 +7,15 @@ use std::mem;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use futures::future::FutureExt;
+use futures::select_biased;
 
 use crate::{send, upcast, Actor, ActorResult, Addr, AddrLike, WeakAddr};
 
 /// Timers can be used on runtimes implementing this trait.
 pub trait SupportsTimers {
     /// The type of future returned by `delay`.
-    type Delay: Future<Output = ()> + Send + 'static;
+    type Delay: Future<Output = ()> + Send + Unpin + 'static;
 
     /// Create a future which will complete when the deadline
     /// is passed.
@@ -61,6 +63,26 @@ pub enum TimerState {
         /// Interval between ticks.
         interval: Duration,
     },
+}
+
+impl TimerState {
+    /// Returns the point in time when this timer will next fire, or
+    /// `None` if the timer is currently inactive.
+    pub fn deadline(&self) -> Option<Instant> {
+        match *self {
+            TimerState::Inactive => None,
+            TimerState::Timeout { deadline } => Some(deadline),
+            TimerState::Interval { deadline, .. } => Some(deadline),
+        }
+    }
+    /// Returns the interval between ticks if the timer is active and set
+    /// to repeat.
+    pub fn interval(&self) -> Option<Duration> {
+        match *self {
+            TimerState::Inactive | TimerState::Timeout { .. } => None,
+            TimerState::Interval { interval, .. } => Some(interval),
+        }
+    }
 }
 
 impl Default for TimerState {
@@ -235,6 +257,31 @@ impl<R: SupportsTimers> Timer<R> {
 
         self.state = InternalTimerState::Timeout { deadline };
     }
+    fn run_with_timeout_internal<
+        T: Tick + ?Sized,
+        A: AddrLike<Actor = T>,
+        F: Future<Output = ()> + Send + 'static,
+    >(
+        &mut self,
+        addr: A,
+        deadline: Instant,
+        f: impl FnOnce(A) -> F + Send + 'static,
+    ) {
+        let addr2 = addr.clone();
+        let mut delay = self.runtime.delay(deadline).fuse();
+        addr.send_fut(async move {
+            if select_biased! {
+                _ = f(addr2.clone()).fuse() => true,
+                _ = delay => false,
+            } {
+                // Future completed first, so wait for delay too
+                delay.await;
+            }
+            send!(addr2.tick());
+        });
+
+        self.state = InternalTimerState::Timeout { deadline };
+    }
 
     /// Configure the timer to tick at a set interval with an initial delay.
     /// The timer will not try to keep the actor alive.
@@ -285,5 +332,56 @@ impl<R: SupportsTimers> Timer<R> {
     /// The timer will try to keep the actor alive until that time.
     pub fn set_timeout_for_strong<T: Tick>(&mut self, addr: Addr<T>, duration: Duration) {
         self.set_timeout_internal(addr, Instant::now() + duration);
+    }
+    /// Configure the timer to tick once at the specified time, whilst simultaneously
+    /// running a task to completion. If the timeout completes first, the task will
+    /// be dropped.
+    /// The timer will not try to keep the actor alive.
+    pub fn run_with_timeout_weak<T: Tick + ?Sized, F: Future<Output = ()> + Send + 'static>(
+        &mut self,
+        addr: WeakAddr<T>,
+        deadline: Instant,
+        f: impl FnOnce(WeakAddr<T>) -> F + Send + 'static,
+    ) {
+        self.run_with_timeout_internal(addr, deadline, f);
+    }
+    /// Configure the timer to tick once at the specified time, whilst simultaneously
+    /// running a task to completion. If the timeout completes first, the task will
+    /// be dropped.
+    /// The timer will try to keep the actor alive until that time.
+    pub fn run_with_timeout_strong<T: Tick + ?Sized, F: Future<Output = ()> + Send + 'static>(
+        &mut self,
+        addr: Addr<T>,
+        deadline: Instant,
+        f: impl FnOnce(Addr<T>) -> F + Send + 'static,
+    ) {
+        self.run_with_timeout_internal(addr, deadline, f);
+    }
+    /// Configure the timer to tick once at the specified time, whilst simultaneously
+    /// running a task to completion. If the timeout completes first, the task will
+    /// be dropped.
+    /// The timer will not try to keep the actor alive.
+    pub fn run_with_timeout_for_weak<T: Tick + ?Sized, F: Future<Output = ()> + Send + 'static>(
+        &mut self,
+        addr: WeakAddr<T>,
+        duration: Duration,
+        f: impl FnOnce(WeakAddr<T>) -> F + Send + 'static,
+    ) {
+        self.run_with_timeout_internal(addr, Instant::now() + duration, f);
+    }
+    /// Configure the timer to tick once at the specified time, whilst simultaneously
+    /// running a task to completion. If the timeout completes first, the task will
+    /// be dropped.
+    /// The timer will try to keep the actor alive until that time.
+    pub fn run_with_timeout_for_strong<
+        T: Tick + ?Sized,
+        F: Future<Output = ()> + Send + 'static,
+    >(
+        &mut self,
+        addr: Addr<T>,
+        duration: Duration,
+        f: impl FnOnce(Addr<T>) -> F + Send + 'static,
+    ) {
+        self.run_with_timeout_internal(addr, Instant::now() + duration, f);
     }
 }

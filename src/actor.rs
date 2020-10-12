@@ -1,14 +1,67 @@
 use std::error::Error;
+use std::future::Future;
+use std::mem;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
+use futures::channel::oneshot;
+use futures::future::FutureExt;
 use log::error;
 
 use crate::Addr;
 
 /// The type of error returned by an actor method.
-pub type ActorError = Box<dyn Error + Send>;
+pub type ActorError = Box<dyn Error + Send + Sync>;
 /// Short alias for a `Result<T, ActorError>`.
-pub type ActorResult<T> = Result<T, ActorError>;
+pub type ActorResult<T> = Result<Produces<T>, ActorError>;
+
+/// A concrete type similar to a `BoxFuture<'static, Result<T, oneshot::Canceled>>`, but
+/// without requiring an allocation if the value is immediately ready.
+/// This type implements the `Future` trait and can be directly `await`ed.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Produces<T> {
+    /// No value was produced.
+    None,
+    /// A value is ready.
+    Value(T),
+    /// A value may be sent in the future.
+    Deferred(oneshot::Receiver<Produces<T>>),
+}
+
+impl<T> Unpin for Produces<T> {}
+
+impl<T> Produces<T> {
+    /// Returns `Ok(Produces::Value(value))`
+    pub fn ok(value: T) -> ActorResult<T> {
+        Ok(Produces::Value(value))
+    }
+}
+
+impl<T> Future for Produces<T> {
+    type Output = Result<T, oneshot::Canceled>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            break match mem::replace(&mut *self, Produces::None) {
+                Produces::None => Poll::Ready(Err(oneshot::Canceled)),
+                Produces::Value(value) => Poll::Ready(Ok(value)),
+                Produces::Deferred(mut recv) => match recv.poll_unpin(cx) {
+                    Poll::Ready(Ok(producer)) => {
+                        *self = producer;
+                        continue;
+                    }
+                    Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                    Poll::Pending => {
+                        *self = Produces::Deferred(recv);
+                        Poll::Pending
+                    }
+                },
+            };
+        }
+    }
+}
 
 /// Trait implemented by all actors.
 /// This trait is defined using the `#[async_trait]` attribute:
@@ -45,7 +98,7 @@ pub trait Actor: Send + 'static {
     where
         Self: Sized,
     {
-        Ok(())
+        Produces::ok(())
     }
 
     /// Called when any actor method returns an error. If this method
@@ -76,6 +129,6 @@ impl<T> IntoActorResult for ActorResult<T> {
 impl IntoActorResult for () {
     type Output = ();
     fn into_actor_result(self) -> ActorResult<()> {
-        Ok(())
+        Produces::ok(())
     }
 }

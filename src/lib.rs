@@ -23,7 +23,7 @@
 //! impl SimpleGreeter {
 //!     async fn greet(&mut self, name: String) -> ActorResult<String> {
 //!         self.number_of_greets += 1;
-//!         Ok(format!(
+//!         Produces::ok(format!(
 //!             "Hello, {}. You are number {}!",
 //!             name, self.number_of_greets
 //!         ))
@@ -72,4 +72,26 @@ pub use utils::*;
 pub mod hidden {
     pub use futures::channel::oneshot;
     pub use futures::future::FutureExt;
+
+    #[cfg(feature = "tracing")]
+    pub use log::trace;
+
+    #[cfg(not(feature = "tracing"))]
+    #[doc(hidden)]
+    #[macro_export]
+    macro_rules! trace {
+        // Strip out all uses of `trace!`
+        ($($args:tt)*) => {};
+    }
+    #[cfg(not(feature = "tracing"))]
+    pub use trace;
+
+    #[cfg(feature = "tracing")]
+    pub fn type_name_of_val<T: ?Sized>(_val: &T) -> tynm::TypeName<'static> {
+        tynm::TypeName::new::<&T>()
+    }
+    #[cfg(feature = "tracing")]
+    pub fn type_name_of_addr<T: crate::AddrLike>(_val: &T) -> tynm::TypeName<'static> {
+        tynm::TypeName::new::<&T::Actor>()
+    }
 }

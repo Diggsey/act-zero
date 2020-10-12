@@ -25,7 +25,7 @@ impl Actor for SimpleGreeter {}
 impl SimpleGreeter {
     async fn greet(&mut self, name: String) -> ActorResult<String> {
         self.number_of_greets += 1;
-        Ok(format!(
+        Produces::ok(format!(
             "Hello, {}. You are number {}!",
             name, self.number_of_greets
         ))

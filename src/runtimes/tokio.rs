@@ -45,7 +45,7 @@ mod tests {
         impl Actor for Echo {}
         impl Echo {
             async fn echo(&mut self, x: &'static str) -> ActorResult<&'static str> {
-                Ok(x)
+                Produces::ok(x)
             }
         }
 
@@ -74,7 +74,7 @@ mod tests {
         impl Actor for DebouncedEcho {
             async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
                 self.addr = addr.downgrade();
-                Ok(())
+                Produces::ok(())
             }
         }
 
@@ -85,7 +85,7 @@ mod tests {
                     let (msg, tx) = self.response.take().unwrap();
                     let _ = tx.send(msg);
                 }
-                Ok(())
+                Produces::ok(())
             }
         }
         impl DebouncedEcho {
@@ -97,7 +97,7 @@ mod tests {
                 self.response = Some((msg, tx));
                 self.timer
                     .set_timeout_for_strong(self.addr.upgrade(), Duration::from_secs(1));
-                Ok(rx)
+                Produces::ok(rx)
             }
         }
 
@@ -131,7 +131,7 @@ mod tests {
         impl Actor for DebouncedEcho {
             async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
                 self.addr = addr.downgrade();
-                Ok(())
+                Produces::ok(())
             }
         }
 
@@ -142,7 +142,7 @@ mod tests {
                     let (msg, tx) = self.response.take().unwrap();
                     let _ = tx.send(msg);
                 }
-                Ok(())
+                Produces::ok(())
             }
         }
         impl DebouncedEcho {
@@ -154,7 +154,7 @@ mod tests {
                 self.response = Some((msg, tx));
                 self.timer
                     .set_timeout_for_weak(self.addr.clone(), Duration::from_secs(1));
-                Ok(rx)
+                Produces::ok(rx)
             }
         }
 

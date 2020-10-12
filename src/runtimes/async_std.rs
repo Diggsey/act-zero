@@ -45,7 +45,7 @@ mod tests {
     impl Actor for Echo {}
     impl Echo {
         async fn echo(&mut self, x: &'static str) -> ActorResult<&'static str> {
-            Ok(x)
+            Produces::ok(x)
         }
     }
 

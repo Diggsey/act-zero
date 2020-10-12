@@ -12,7 +12,7 @@ use futures::select_biased;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::task::{Spawn, SpawnError, SpawnExt};
 
-use crate::{send, Actor, Termination};
+use crate::{send, Actor, Produces, Termination};
 
 type MutItem<T> = Box<dyn for<'a> FnOnce(&'a mut T) -> BoxFuture<'a, bool> + Send>;
 type FutItem = BoxFuture<'static, ()>;
@@ -104,7 +104,7 @@ fn send_unreachable<T>(_: &Arc<dyn Any + Send + Sync>, _: T) {
 
 /// Trait provides methods for spawning futures onto an actor. Implemented by
 /// `Addr` and `WeakAddr` alike.
-pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
+pub trait AddrLike: Send + Sync + Clone + Debug + 'static + AsAddr<Addr = Self> {
     /// Type of the actor reference by this address.
     type Actor: Actor + ?Sized;
 
@@ -119,8 +119,8 @@ pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
     /// dropped before it has completed.
     fn call_fut<R: Send + 'static>(
         &self,
-        fut: impl Future<Output = R> + Send + 'static,
-    ) -> oneshot::Receiver<R> {
+        fut: impl Future<Output = Produces<R>> + Send + 'static,
+    ) -> Produces<R> {
         let (mut tx, rx) = oneshot::channel();
         self.send_fut(async move {
             select_biased! {
@@ -130,7 +130,20 @@ pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
                 }
             };
         });
-        rx
+        Produces::Deferred(rx)
+    }
+
+    /// Equivalent to `send_fut` but provides access to the actor's address.
+    fn send_fut_with<F: Future<Output = ()> + Send + 'static>(&self, f: impl FnOnce(Self) -> F) {
+        self.send_fut(f(self.clone()));
+    }
+
+    /// Equivalent to `call_fut` but provides access to the actor's address.
+    fn call_fut_with<R: Send + 'static, F: Future<Output = Produces<R>> + Send + 'static>(
+        &self,
+        f: impl FnOnce(Self) -> F,
+    ) -> Produces<R> {
+        self.call_fut(f(self.clone()))
     }
 
     /// Returns a future which resolves when the actor terminates. If the
@@ -138,6 +151,34 @@ pub trait AddrLike: Send + Sync + Clone + Debug + 'static {
     /// future will resolve immediately.
     fn termination(&self) -> Termination {
         Termination(self.call_fut(future::pending()))
+    }
+}
+
+/// Implemented by addresses and references to addresses
+pub trait AsAddr {
+    /// The inner address type
+    type Addr: AddrLike;
+
+    /// Obtain a direct reference to the address
+    fn as_addr(&self) -> &Self::Addr;
+}
+
+impl<T: AsAddr + ?Sized> AsAddr for &T {
+    type Addr = T::Addr;
+    fn as_addr(&self) -> &Self::Addr {
+        (**self).as_addr()
+    }
+}
+impl<T: Actor + ?Sized> AsAddr for crate::Addr<T> {
+    type Addr = Self;
+    fn as_addr(&self) -> &Self::Addr {
+        self
+    }
+}
+impl<T: Actor + ?Sized> AsAddr for crate::WeakAddr<T> {
+    type Addr = Self;
+    fn as_addr(&self) -> &Self::Addr {
+        self
     }
 }
 

@@ -1,11 +1,12 @@
 use std::future::Future;
 
-use futures::channel::oneshot;
 use futures::future::FutureExt;
+
+use crate::Produces;
 
 /// A future which completes upon termination of an actor.
 #[derive(Debug)]
-pub struct Termination(pub(crate) oneshot::Receiver<()>);
+pub struct Termination(pub(crate) Produces<()>);
 
 impl Future for Termination {
     type Output = ();
