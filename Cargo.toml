@@ -26,5 +26,23 @@ async-std = { version = "1.6.5", optional = true }
 tynm = { version = "0.1.4", optional = true }
 
 [dev-dependencies]
-tokio = { version = "0.2.22", features = ["macros"] }
+tokio = { version = "0.2.22", features = ["macros", "blocking"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
+
+[[example]]
+name = "using_tokio"
+required-features = ["tokio"]
+
+[[example]]
+name = "using_async_std"
+required-features = ["async-std"]
+
+[[example]]
+name = "using_global_runtime"
+
+[[example]]
+name = "using_provided_runtime"
+
+[[example]]
+name = "using_timers"
+required-features = ["tokio"]

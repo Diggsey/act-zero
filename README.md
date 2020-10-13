@@ -52,3 +52,5 @@ fn main() -> Result<(), Box<dyn Error>> {
     })
 }
 ```
+
+See the `examples` folder for more varied uses.
