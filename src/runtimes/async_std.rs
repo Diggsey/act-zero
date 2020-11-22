@@ -61,8 +61,9 @@ mod tests {
     // Tests that .termination() waits for the Actor to be dropped
     #[async_std::test]
     async fn wait_drop_test() {
+        use std::time::{Duration, Instant};
         struct WaitDrop {
-            tx: std::sync::mpsc::Sender<u32>,
+            tx: std::sync::mpsc::SyncSender<u32>,
         }
         impl Actor for WaitDrop {}
         impl Drop for WaitDrop {
@@ -71,11 +72,10 @@ mod tests {
                 self.tx.send(5).unwrap();
             }
         }
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        let addr = spawn_actor(WaitDrop { tx});
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let addr = spawn_actor(WaitDrop { tx });
         let ended = addr.termination();
-        std::mem::drop(addr);
+        drop(addr);
         ended.await;
         let res = rx.try_recv();
         assert_eq!(res, Ok(5));
