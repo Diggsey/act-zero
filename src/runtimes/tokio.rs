@@ -169,4 +169,27 @@ mod tests {
 
         assert!(end_time - start_time < Duration::from_millis(10));
     }
+
+    // Tests that .termination() waits for the Actor to be dropped
+    #[tokio::test]
+    async fn wait_drop_test() {
+        struct WaitDrop {
+            tx: std::sync::mpsc::Sender<u32>,
+        }
+        impl Actor for WaitDrop {}
+        impl Drop for WaitDrop {
+            fn drop(&mut self) {
+                std::thread::sleep(Duration::from_millis(100));
+                self.tx.send(5).unwrap();
+            }
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let addr = spawn_actor(WaitDrop { tx});
+        let ended = addr.termination();
+        std::mem::drop(addr);
+        ended.await;
+        let res = rx.try_recv();
+        assert_eq!(res, Ok(5));
+    }
 }

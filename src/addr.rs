@@ -23,6 +23,9 @@ async fn mutex_task<T>(
     mut fut_channel: mpsc::UnboundedReceiver<FutItem>,
 ) {
     let mut futs = FuturesUnordered::new();
+    // Re-bind 'value' so that it is dropped before futs.
+    // That will ensure .termination() completes only once the value's drop has finished.
+    // let mut value = value;
     loop {
         // Obtain an item
         let current_item = loop {
