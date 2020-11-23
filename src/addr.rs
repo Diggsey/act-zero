@@ -18,11 +18,14 @@ type MutItem<T> = Box<dyn for<'a> FnOnce(&'a mut T) -> BoxFuture<'a, bool> + Sen
 type FutItem = BoxFuture<'static, ()>;
 
 async fn mutex_task<T>(
-    mut value: T,
+    value: T,
     mut mut_channel: mpsc::UnboundedReceiver<MutItem<T>>,
     mut fut_channel: mpsc::UnboundedReceiver<FutItem>,
 ) {
     let mut futs = FuturesUnordered::new();
+    // Re-bind 'value' so that it is dropped before futs.
+    // That will ensure .termination() completes only once the value's drop has finished.
+    let mut value = value;
     loop {
         // Obtain an item
         let current_item = loop {
