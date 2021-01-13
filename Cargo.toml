@@ -21,12 +21,12 @@ tracing = ["tynm"]
 futures = "0.3.6"
 async-trait = "0.1.41"
 log = "0.4.11"
-tokio = { version = "0.2.22", features = ["rt-core", "time"], optional = true }
+tokio = { version = "1.0.1", features = ["rt", "time"], optional = true }
 async-std = { version = "1.6.5", optional = true }
 tynm = { version = "0.1.4", optional = true }
 
 [dev-dependencies]
-tokio = { version = "0.2.22", features = ["macros", "blocking"] }
+tokio = { version = "1.0.1", features = ["macros", "rt"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
 
 [[example]]
