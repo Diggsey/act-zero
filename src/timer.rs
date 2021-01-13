@@ -8,14 +8,14 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::future::FutureExt;
-use futures::select_biased;
+use futures::{pin_mut, select_biased};
 
 use crate::{send, upcast, Actor, ActorResult, Addr, AddrLike, WeakAddr};
 
 /// Timers can be used on runtimes implementing this trait.
 pub trait SupportsTimers {
     /// The type of future returned by `delay`.
-    type Delay: Future<Output = ()> + Send + Unpin + 'static;
+    type Delay: Future<Output = ()> + Send + 'static;
 
     /// Create a future which will complete when the deadline
     /// is passed.
@@ -268,8 +268,10 @@ impl<R: SupportsTimers> Timer<R> {
         f: impl FnOnce(A) -> F + Send + 'static,
     ) {
         let addr2 = addr.clone();
-        let mut delay = self.runtime.delay(deadline).fuse();
+        let delay = self.runtime.delay(deadline).fuse();
+
         addr.send_fut(async move {
+            pin_mut!(delay);
             if select_biased! {
                 _ = f(addr2.clone()).fuse() => true,
                 _ = delay => false,

@@ -13,7 +13,7 @@ use crate::Addr;
 
 /// The type of error returned by an actor method.
 pub type ActorError = Box<dyn Error + Send + Sync>;
-/// Short alias for a `Result<T, ActorError>`.
+/// Short alias for a `Result<Produces<T>, ActorError>`.
 pub type ActorResult<T> = Result<Produces<T>, ActorError>;
 
 /// A concrete type similar to a `BoxFuture<'static, Result<T, oneshot::Canceled>>`, but

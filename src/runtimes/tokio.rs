@@ -27,9 +27,9 @@ impl Spawn for Runtime {
 }
 
 impl timer::SupportsTimers for Runtime {
-    type Delay = tokio::time::Delay;
+    type Delay = tokio::time::Sleep;
     fn delay(&self, deadline: Instant) -> Self::Delay {
-        tokio::time::delay_until(deadline.into())
+        tokio::time::sleep_until(deadline.into())
     }
 }
 
