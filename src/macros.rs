@@ -127,7 +127,8 @@ macro_rules! __impl_send {
 /// Constraints:
 /// - The method must be an inherent method or trait method callable on the
 ///   actor type.
-/// - The method must take `&mut self` as the receiver.
+/// - The method can take either `&self` or `&mut self` as the receiver, but only `&mut self` will
+///   be passed in.
 /// - The method must return a future, with an output that implements `IntoActorResult`.
 /// - The arguments must be `Send + 'static`.
 #[macro_export]
